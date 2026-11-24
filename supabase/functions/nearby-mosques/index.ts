@@ -157,13 +157,13 @@ out center tags 100;`;
       let match = (registered || []).find((item: any) => item.osm_key === osmKey);
       if (!match) {
         const core = coreName(name);
-        if (core) {
-          match = (registered || []).find((item: any) =>
-            coreName(item.name || "") === core &&
-            distance <= 3 &&
-            (!item.city || item.city.toLowerCase() === String(locality).toLowerCase() ||
-              String(locality).toLowerCase() === "nearby area")
+        if (core && distance <= 3) {
+          const candidates = (registered || []).filter((item: any) =>
+            coreName(item.name || "") === core
           );
+          // Only auto-match an unlinked listing when the name is unique in Noor's directory.
+          // Ambiguous names stay separate so a user doesn't inherit another mosque's timetable.
+          if (candidates.length === 1) match = candidates[0];
         }
       }
       const days = match ? [...(availableDays.get(match.id) || new Set<string>())].sort() : [];
