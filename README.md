@@ -64,6 +64,20 @@ date,fajr,sunrise,dhuhr,asr,maghrib,isha,fajr_jamaat,dhuhr_jamaat,asr_jamaat,ish
 ```
 
 Use YYYY-MM-DD dates and 24-hour HH:MM values. Jamaat columns are optional; do not enter estimated values.
+## Nearby mosque discovery
+
+Signed-in users can choose **Find mosques near me** during setup or from Settings. Noor asks the device for location permission only when the user taps the button, then sends the coordinates to the authenticated `nearby-mosques` Edge Function. That function queries OpenStreetMap's Overpass API and returns named mosque listings within a user-selected 3, 6 or 10 km radius, sorted by distance.
+
+The app does not save the device coordinates in the Noor profile. The coordinates are used in the search request and are forwarded to OpenStreetMap's public map-data service. OpenStreetMap attribution is displayed with the results.
+
+A nearby map listing is **not** treated as a verified prayer timetable. Noor checks whether a selected mosque has actual timetable rows in the database. If it does, the rows are linked/copied to the signed-in user's account. If it does not, Noor clearly indicates that a verified timetable is not yet available; it does not calculate or invent times from map data.
+
+The functions are:
+- `nearby-mosques` — authenticated, read-only search over OpenStreetMap plus timetable-availability matching.
+- `register-mosque` — authenticated registration of a selected public mosque listing in Noor's directory.
+
+Related migration: `0010_add_openstreetmap_mosque_metadata.sql`.
+
 ## Edge Functions and push delivery
 
 The following functions are deployed:
