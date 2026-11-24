@@ -86,7 +86,8 @@ export default function App() {
   }, [sessionEmail]);
 
   useEffect(() => {
-    if (!supabase || !sessionEmail) {
+    const client = supabase;
+    if (!client || !sessionEmail) {
       setPrefsLoaded(false);
       return;
     }
@@ -94,11 +95,11 @@ export default function App() {
     let active = true;
     const loadPreferences = async () => {
       try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        const { data: { user }, error: userError } = await client.auth.getUser();
         if (userError) throw userError;
         if (!user) throw new Error("Please sign in to load your preferences.");
 
-        const { data, error } = await supabase
+        const { data, error } = await client
           .from("user_preferences")
           .select("prayer_notification_preferences")
           .eq("user_id", user.id)
@@ -117,7 +118,7 @@ export default function App() {
             });
           }
         } else {
-          const { error: insertError } = await supabase
+          const { error: insertError } = await client
             .from("user_preferences")
             .upsert({
               user_id: user.id,
@@ -144,13 +145,14 @@ export default function App() {
   }, [sessionEmail]);
 
   useEffect(() => {
-    if (!supabase || !sessionEmail || !prefsLoaded) return;
+    const client = supabase;
+    if (!client || !sessionEmail || !prefsLoaded) return;
 
     let active = true;
     const savePreferences = async () => {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await client.auth.getUser();
       if (userError || !user) return;
-      const { error } = await supabase.from("user_preferences").upsert({
+      const { error } = await client.from("user_preferences").upsert({
         user_id: user.id,
         location: "Nottingham, UK",
         timezone: "Europe/London",
