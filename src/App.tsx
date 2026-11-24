@@ -420,7 +420,13 @@ export default function App() {
           radiusMeters: nearbyRadius,
         },
       });
-      if (error) throw error;
+      if (error) {
+        if ("context" in error && error.context instanceof Response) {
+          const details = await error.context.clone().json().catch(() => null) as { error?: string } | null;
+          throw new Error(details?.error || error.message);
+        }
+        throw error;
+      }
       if (data?.error) throw new Error(String(data.error));
       const results = (data?.mosques || []) as NearbyMosque[];
       setNearbyMosques(results);
