@@ -15,6 +15,30 @@ function londonParts(date: Date) {
   return { date: `${get("year")}-${get("month")}-${get("day")}`, hour: get("hour"), minute: get("minute") };
 }
 
+function readKeyDictionary(name: string): Record<string, string> {
+  const raw = Deno.env.get(name);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function getPublishableKey(): string {
+  const keys = readKeyDictionary("SUPABASE_PUBLISHABLE_KEYS");
+  const key = keys.default || Deno.env.get("SUPABASE_ANON_KEY");
+  if (!key) throw new Error("Supabase publishable key is unavailable in this function environment.");
+  return key;
+}
+
+function getSecretKey(): string {
+  const keys = readKeyDictionary("SUPABASE_SECRET_KEYS");
+  const key = keys.default || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!key) throw new Error("Supabase server secret key is unavailable in this function environment.");
+  return key;
+}
+
 Deno.serve(async (req) => {
   try {
     const expected = Deno.env.get("CRON_SECRET");
@@ -23,7 +47,7 @@ Deno.serve(async (req) => {
     }
 
     const url = Deno.env.get("SUPABASE_URL")!;
-    const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const service = getSecretKey();
     const admin = createClient(url, service);
     webpush.setVapidDetails(
       Deno.env.get("VAPID_SUBJECT") || "mailto:admin@example.com",
