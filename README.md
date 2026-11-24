@@ -10,6 +10,7 @@ A React + TypeScript progressive web app for Nottingham prayer times, timetable 
 - Supabase project: `Noor` (EU West / Ireland).
 - Client uses the Supabase project URL and a publishable key. Publishable keys are designed for browser use; never place a Supabase secret/service-role key in frontend code.
 - Vite base path and PWA assets are configured for `/noor-prayer-companion/`.
+- The Pages build supplies the public VAPID key as `VITE_VAPID_PUBLIC_KEY`.
 
 ## Supabase database
 
@@ -23,23 +24,26 @@ The initial schema is in `supabase/migrations/0001_noor_schema.sql`. It creates:
 
 The incremental access and security hardening is in `supabase/migrations/0002_api_access_and_security_hardening.sql`. Row Level Security is enabled; mosque entries are readable, authenticated users can manage their own prayer timetable rows, and device subscriptions/preferences/notification logs are not directly exposed to app clients.
 
+`0003_restore_service_role_table_access.sql` restores the explicit table privileges required by trusted server-side Edge Functions. It does not grant those privileges to `anon` or ordinary `authenticated` users.
+
 ## Frontend configuration
 
 The GitHub Pages workflow supplies:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_VAPID_PUBLIC_KEY`
 
-For local development, copy `.env.example` to `.env.local` and fill in the values. Keep secrets out of source control.
+For local development, copy `.env.example` to `.env.local` and fill in the values. Keep private secrets out of source control.
 
 ## Authentication configuration
 
 In Supabase Dashboard → Authentication → URL Configuration:
 
-- Set the Site URL to `https://waleedmanzoor.co.uk/noor-prayer-companion/`.
-- Add that same URL to the allowed Redirect URLs list.
+- Site URL: `https://waleedmanzoor.co.uk/noor-prayer-companion/`
+- Allowed Redirect URL: `https://waleedmanzoor.co.uk/noor-prayer-companion/`
 
-Noor sends email magic links back to the app subdirectory.
+The live project's Site URL and redirect allow-list have been configured. Noor sends email magic links back to the app subdirectory.
 
 ## Prayer timetable
 
@@ -56,7 +60,7 @@ date,fajr,sunrise,dhuhr,asr,maghrib,isha,source
 
 Replace every `HH:MM` with actual verified 24-hour local UK times. The current interface loads today's timetable; monthly timetable browsing is still limited.
 
-## Edge Functions
+## Edge Functions and push delivery
 
 The following functions are deployed:
 
@@ -66,18 +70,23 @@ The following functions are deployed:
 
 They use Supabase's injected publishable/secret key environment dictionaries, with legacy-key fallbacks.
 
-### Remaining push configuration
+The existing Noor project stores these values encrypted in Supabase Vault:
 
-Add these secrets in Supabase Dashboard → Edge Functions → Secrets:
+- `noor_vapid_public_key`
+- `noor_vapid_private_key`
+- `noor_cron_secret`
+- `noor_project_url`
 
-- `VAPID_PUBLIC_KEY`
-- `VAPID_PRIVATE_KEY`
-- `VAPID_SUBJECT` (for example `mailto:admin@example.com`)
-- `CRON_SECRET` (a long random value)
+The public VAPID key is included in the frontend build. The private VAPID key and cron secret are never placed in GitHub or browser code. The Edge Functions retrieve them through a Vault-reading RPC that is executable only by the `service_role`.
 
-Also set `VITE_VAPID_PUBLIC_KEY` in the GitHub Pages build workflow to the matching VAPID public key. The private key and cron secret must never be committed to GitHub or placed in a `VITE_` variable.
+The scheduled job `noor-prayer-notification-dispatch` is active and invokes the dispatch function every minute through `pg_cron` and `pg_net`. The dispatcher endpoint performs its own `x-cron-secret` check.
 
-The dispatcher must be invoked once per minute with an `x-cron-secret` header matching `CRON_SECRET`. Configure this through Supabase Cron + pg_net, keeping the cron secret in Supabase Vault. Do not put server secret keys in browser code.
+Related migrations:
+
+- `0004_enable_notification_extensions.sql`
+- `0005_vault_secret_access_and_notification_cron.sql`
+
+The scheduled dispatcher has been smoke-tested and returned HTTP 200. Actual prayer notifications still require a verified timetable row and at least one subscribed device.
 
 ## iPhone installation
 
