@@ -168,3 +168,12 @@ button{cursor:pointer}
 .timetable-status.missing{color:var(--muted)}
 .nearby-pick{color:var(--gold);padding-top:5px;flex-shrink:0}
 .osm-attribution{font-size:8px;color:var(--muted);text-align:right;margin:9px 2px 0}
+
+
+/* Inline feedback for location permission and nearby mosque search */
+.nearby-feedback{display:flex;align-items:flex-start;gap:9px;margin-top:10px;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface2);color:var(--muted);font-size:10px;line-height:1.5}
+.nearby-feedback.pending{color:var(--text);border-color:var(--gold2)}
+.nearby-feedback.success{color:#5caa79;border-color:rgba(92,170,121,.35)}
+.nearby-feedback.error{color:var(--text);border-color:rgba(190,116,92,.45)}
+.nearby-spinner{width:13px;height:13px;flex-shrink:0;border:2px solid var(--line);border-top-color:var(--gold);border-radius:50%;animation:noor-spin .8s linear infinite;margin-top:1px}
+@keyframes noor-spin{to{transform:rotate(360deg)}}
