@@ -183,7 +183,11 @@ export default function App() {
       }
       const { data, error } = await query;
       if (error) throw error;
-      setMonthRows((data || []) as PrayerRow[]);
+      const uniqueDays = new Map<string, PrayerRow>();
+      for (const item of (data || []) as PrayerRow[]) {
+        if (!uniqueDays.has(item.prayer_date)) uniqueDays.set(item.prayer_date, item);
+      }
+      setMonthRows([...uniqueDays.values()]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not load the mosque timetable.");
     } finally {
