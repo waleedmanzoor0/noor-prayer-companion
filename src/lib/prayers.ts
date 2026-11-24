@@ -3,8 +3,11 @@ import { PRAYER_KEYS } from "./types";
 import { localDateKey, prayerDateTime } from "./date";
 
 export function toPrayers(row: PrayerRow): Prayer[] {
-  return PRAYER_KEYS.map(({ name, key, arabic }) => ({
-    name, time: String(row[key] ?? ""), arabic
+  return PRAYER_KEYS.map(({ name, key, jamaatKey, arabic }) => ({
+    name,
+    time: String(row[key] ?? ""),
+    jamaat: jamaatKey ? String(row[jamaatKey] ?? "") || null : null,
+    arabic
   }));
 }
 
