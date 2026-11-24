@@ -50,10 +50,22 @@ Deno.serve(async (req) => {
     if (error) throw error;
     if (!subs?.length) throw new Error("No registered device found. Enable notifications on your iPhone first.");
 
+    const { data: vapidPublic, error: vapidPublicError } = await admin.rpc(
+      "noor_get_vault_secret",
+      { secret_name: "noor_vapid_public_key" }
+    );
+    const { data: vapidPrivate, error: vapidPrivateError } = await admin.rpc(
+      "noor_get_vault_secret",
+      { secret_name: "noor_vapid_private_key" }
+    );
+    if (vapidPublicError || vapidPrivateError || !vapidPublic || !vapidPrivate) {
+      throw new Error("Noor push credentials are not available in Supabase Vault.");
+    }
+
     webpush.setVapidDetails(
-      Deno.env.get("VAPID_SUBJECT") || "mailto:admin@example.com",
-      Deno.env.get("VAPID_PUBLIC_KEY")!,
-      Deno.env.get("VAPID_PRIVATE_KEY")!
+      Deno.env.get("VAPID_SUBJECT") || "https://waleedmanzoor.co.uk/",
+      String(vapidPublic),
+      String(vapidPrivate)
     );
 
     const payload = JSON.stringify({
