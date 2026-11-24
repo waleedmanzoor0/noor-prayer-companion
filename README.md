@@ -45,7 +45,7 @@ In Supabase Dashboard → Authentication → URL Configuration:
 
 The live project's Site URL and redirect allow-list have been configured.
 
-Noor uses six-digit email OTP sign-in. In Supabase Dashboard → Authentication → Email Templates → Magic Link, set the subject to `Your Noor sign-in code` and replace the template body with an email containing `{{ .Token }}` (not `{{ .ConfirmationURL }}`). The app sends the code with `signInWithOtp()` and verifies it with `verifyOtp({ email, token, type: "email" })`.
+Noor uses eight-digit email OTP sign-in. In Supabase Dashboard → Authentication → Email Templates → Magic Link, set the subject to `Your Noor sign-in code` and replace the template body with an email containing `{{ .Token }}` (not `{{ .ConfirmationURL }}`). The app sends the code with `signInWithOtp()` and verifies it with `verifyOtp({ email, token, type: "email" })`.
 
 ## Prayer timetable
 
@@ -60,7 +60,7 @@ date,fajr,sunrise,dhuhr,asr,maghrib,isha,source
 2026-11-24,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,Official mosque timetable
 ```
 
-Replace every `HH:MM` with actual verified 24-hour local UK times. The current interface loads today's timetable; monthly timetable browsing is still limited. Fazilat Masjid's November 2026 schedule is imported for 1–30 November. Prayer start times are used for countdowns and notification scheduling; Fajr, Dhuhr, Asr and Isha Jamaat times are stored and displayed separately. Maghrib has no separate Jamaat column on the supplied timetable.
+Replace every `HH:MM` with actual verified 24-hour local UK times. Phase 1 now includes a guided first-time setup flow, a simplified Home dashboard, grouped Settings and a month calendar with selectable date details. The timetable screen shows every available date for the selected mosque. Fazilat Masjid's November 2026 schedule is imported for 1–30 November. Prayer start times are used for countdowns and notification scheduling; Fajr, Dhuhr, Asr and Isha Jamaat times are stored and displayed separately. Maghrib has no separate Jamaat column on the supplied timetable. Fazilat Masjid's November 2026 schedule is imported for 1–30 November. Prayer start times are used for countdowns and notification scheduling; Fajr, Dhuhr, Asr and Isha Jamaat times are stored and displayed separately. Maghrib has no separate Jamaat column on the supplied timetable.
 
 ## Edge Functions and push delivery
 
@@ -89,6 +89,8 @@ Related migrations:
 - `0005_vault_secret_access_and_notification_cron.sql`
 - `0006_allow_users_to_manage_own_preferences.sql`
 - `0007_add_jamaat_time_columns.sql`
+- `0008_add_preferred_mosque_to_user_preferences.sql`
+- `0009_share_selected_mosque_timetable_for_reading.sql`
 
 The scheduled dispatcher has been smoke-tested and returned HTTP 200. Actual prayer notifications still require a verified timetable row and at least one subscribed device.
 
@@ -117,7 +119,7 @@ npm run build
 ## Known limitations
 
 - CSV parsing is simple and does not support quoted commas.
-- The current interface loads today's timetable only.
+- The month calendar can browse all dates currently imported for the selected mosque; it does not yet automatically retrieve future months from the mosque.
 - Prayer reminder preferences and some display preferences are currently stored locally rather than synchronised across devices.
 - Background Adhan audio is not implemented.
 - A production release should add stronger timetable administration, subscription cleanup, delivery observability, backup/restore, and end-to-end testing.
