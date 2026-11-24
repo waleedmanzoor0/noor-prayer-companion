@@ -30,6 +30,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://uuzgfzivxehlugzqgtaj.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_MAzXgWivMedrb6eKrYT8Qg_DJKzKDTQ
+          VITE_VAPID_PUBLIC_KEY: BHaw5yuKfITVD5Y5euuXH_Me0_B34dlzh0tm1Hld_JiedCEbHot_TuGeE74TwDlXMuETpUzX88Ci4mtZeVhiLsU
         run: npm run build
       - name: Configure Pages
         uses: actions/configure-pages@v5
