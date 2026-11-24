@@ -6,14 +6,38 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function readKeyDictionary(name: string): Record<string, string> {
+  const raw = Deno.env.get(name);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function getPublishableKey(): string {
+  const keys = readKeyDictionary("SUPABASE_PUBLISHABLE_KEYS");
+  const key = keys.default || Deno.env.get("SUPABASE_ANON_KEY");
+  if (!key) throw new Error("Supabase publishable key is unavailable in this function environment.");
+  return key;
+}
+
+function getSecretKey(): string {
+  const keys = readKeyDictionary("SUPABASE_SECRET_KEYS");
+  const key = keys.default || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!key) throw new Error("Supabase server secret key is unavailable in this function environment.");
+  return key;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Missing authorization.");
     const url = Deno.env.get("SUPABASE_URL")!;
-    const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anon = getPublishableKey();
+    const service = getSecretKey();
     const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
     const { data: { user } } = await userClient.auth.getUser();
     if (!user) throw new Error("Sign in first.");
