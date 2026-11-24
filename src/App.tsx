@@ -84,7 +84,7 @@ export default function App() {
   async function signIn() {
     if (!supabase || !email) return;
     setBusy(true);
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).toString() } });
     setMessage(error ? error.message : "Check your email for your secure sign-in link.");
     setBusy(false);
   }
