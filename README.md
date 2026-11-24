@@ -60,7 +60,7 @@ date,fajr,sunrise,dhuhr,asr,maghrib,isha,source
 2026-11-24,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,Official mosque timetable
 ```
 
-Replace every `HH:MM` with actual verified 24-hour local UK times. The current interface loads today's timetable; monthly timetable browsing is still limited.
+Replace every `HH:MM` with actual verified 24-hour local UK times. The current interface loads today's timetable; monthly timetable browsing is still limited. Fazilat Masjid's November 2026 schedule is imported for 1–30 November. Prayer start times are used for countdowns and notification scheduling; Fajr, Dhuhr, Asr and Isha Jamaat times are stored and displayed separately. Maghrib has no separate Jamaat column on the supplied timetable.
 
 ## Edge Functions and push delivery
 
@@ -87,6 +87,8 @@ Related migrations:
 
 - `0004_enable_notification_extensions.sql`
 - `0005_vault_secret_access_and_notification_cron.sql`
+- `0006_allow_users_to_manage_own_preferences.sql`
+- `0007_add_jamaat_time_columns.sql`
 
 The scheduled dispatcher has been smoke-tested and returned HTTP 200. Actual prayer notifications still require a verified timetable row and at least one subscribed device.
 
