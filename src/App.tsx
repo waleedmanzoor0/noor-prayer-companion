@@ -209,8 +209,8 @@ export default function App() {
     const normalizedEmail = email.trim().toLowerCase();
     const token = otp.replace(/\\s/g, "");
     if (!client || !normalizedEmail) return;
-    if (!/^\\d{6}$/.test(token)) {
-      setMessage("Enter the six-digit code from your email.");
+    if (!/^\\d{8}$/.test(token)) {
+      setMessage("Enter the eight-digit code from your email.");
       return;
     }
 
@@ -443,7 +443,7 @@ export default function App() {
                     </button>
                   ) : (
                     <>
-                      <p className="small-note">Enter the six-digit code sent to <strong>{email}</strong>. Check your junk folder too.</p>
+                      <p className="small-note">Enter the eight-digit code sent to <strong>{email}</strong>. Check your junk folder too.</p>
                       <label className="field-label" htmlFor="noor-login-code">Verification code</label>
                       <input
                         id="noor-login-code"
@@ -452,14 +452,14 @@ export default function App() {
                         inputMode="numeric"
                         pattern="[0-9]*"
                         autoComplete="one-time-code"
-                        maxLength={6}
+                        maxLength={8}
                         value={otp}
-                        onChange={e => setOtp(e.target.value.replace(/\\D/g, "").slice(0, 6))}
-                        placeholder="000000"
-                        aria-label="Six-digit email verification code"
+                        onChange={e => setOtp(e.target.value.replace(/\\D/g, "").slice(0, 8))}
+                        placeholder="00000000"
+                        aria-label="Eight-digit email verification code"
                         disabled={busy}
                       />
-                      <button className="primary-btn full" onClick={verifyEmailCode} disabled={busy || otp.length !== 6}>
+                      <button className="primary-btn full" onClick={verifyEmailCode} disabled={busy || otp.length !== 8}>
                         <ShieldCheck size={16}/>{busy ? "Verifying…" : "Verify code & sign in"}
                       </button>
                       <button className="secondary-btn full" onClick={signIn} disabled={busy}>
