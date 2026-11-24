@@ -43,13 +43,15 @@ In Supabase Dashboard → Authentication → URL Configuration:
 - Site URL: `https://waleedmanzoor.co.uk/noor-prayer-companion/`
 - Allowed Redirect URL: `https://waleedmanzoor.co.uk/noor-prayer-companion/`
 
-The live project's Site URL and redirect allow-list have been configured. Noor sends email magic links back to the app subdirectory.
+The live project's Site URL and redirect allow-list have been configured.
+
+Noor uses six-digit email OTP sign-in. In Supabase Dashboard → Authentication → Email Templates → Magic Link, set the subject to `Your Noor sign-in code` and replace the template body with an email containing `{{ .Token }}` (not `{{ .ConfirmationURL }}`). The app sends the code with `signInWithOtp()` and verifies it with `verifyOtp({ email, token, type: "email" })`.
 
 ## Prayer timetable
 
 No official Nottingham mosque timetable is bundled. Noor intentionally shows no prayer times until a verified timetable is imported.
 
-1. Sign in using the email magic link.
+1. Sign in by entering your email address and the six-digit verification code sent to your inbox.
 2. Open Settings → Import mosque timetable.
 3. Import rows using:
 
