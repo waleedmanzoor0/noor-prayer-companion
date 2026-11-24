@@ -468,6 +468,8 @@ export default function App() {
     setBusy(true);
     try {
       let mosqueId = item.mosqueId;
+      let timetableAvailable = item.timetableAvailable;
+      let availableDays = item.availableDays;
       if (!mosqueId) {
         const { data, error } = await client.functions.invoke("register-mosque", {
           body: {
@@ -481,6 +483,8 @@ export default function App() {
         });
         if (error) throw error;
         mosqueId = data?.mosque?.id || null;
+        timetableAvailable = Boolean(data?.timetableAvailable);
+        availableDays = Number(data?.availableDays || 0);
         if (!mosqueId) throw new Error("Noor could not save that mosque. Please try again.");
       }
 
@@ -489,7 +493,7 @@ export default function App() {
         name: item.name,
         address: item.address,
         city: item.city,
-        timetable_source: item.timetableAvailable ? "Verified mosque timetable" : "No verified timetable has been added yet",
+        timetable_source: timetableAvailable ? "Verified mosque timetable" : "No verified timetable has been added yet",
       };
       setMosques(previous => previous.some(m => m.id === mosqueId)
         ? previous.map(m => m.id === mosqueId ? { ...m, ...record } : m)
@@ -497,8 +501,8 @@ export default function App() {
       setSelectedMosqueId(mosqueId);
 
       if (setupRequired) {
-        setMessage(item.timetableAvailable
-          ? item.name + " selected. Its available timetable will be linked when you finish setup."
+        setMessage(timetableAvailable
+          ? item.name + " selected. " + availableDays + " timetable day(s) will be linked when you finish setup."
           : item.name + " selected. Its prayer timetable is not yet available in Noor.");
         return;
       }
