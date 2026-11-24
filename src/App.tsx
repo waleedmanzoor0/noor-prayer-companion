@@ -118,21 +118,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!supabase || !sessionEmail) return;
+    const client = supabase;
+    if (!client || !sessionEmail) return;
     let active = true;
     const loadSetup = async () => {
       setBusy(true);
       try {
         const [{ data: mosqueData, error: mosqueError }, { data: { user }, error: userError }] = await Promise.all([
-          supabase.from("mosques").select("id,name,address,city,timetable_source").order("name"),
-          supabase.auth.getUser(),
+          client.from("mosques").select("id,name,address,city,timetable_source").order("name"),
+          client.auth.getUser(),
         ]);
         if (mosqueError) throw mosqueError;
         if (userError || !user) throw userError || new Error("Please sign in again.");
         const available = (mosqueData || []) as Mosque[];
         if (active) setMosques(available);
 
-        const { data, error } = await supabase.from("user_preferences")
+        const { data, error } = await client.from("user_preferences")
           .select("preferred_mosque_id,location,timezone,asr_school,notifications_enabled,prayer_notification_preferences")
           .eq("user_id", user.id).maybeSingle();
         if (error) throw error;
@@ -200,12 +201,13 @@ export default function App() {
   }, [sessionEmail, selectedMosqueId, prefsLoaded]);
 
   useEffect(() => {
-    if (!supabase || !sessionEmail || !prefsLoaded || setupRequired || !selectedMosqueId) return;
+    const client = supabase;
+    if (!client || !sessionEmail || !prefsLoaded || setupRequired || !selectedMosqueId) return;
     let active = true;
     const save = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await client.auth.getUser();
       if (!user) return;
-      const { error } = await supabase.from("user_preferences").upsert({
+      const { error } = await client.from("user_preferences").upsert({
         user_id: user.id,
         preferred_mosque_id: selectedMosqueId,
         location: "Nottingham, UK",
