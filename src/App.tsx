@@ -79,6 +79,7 @@ export default function App() {
   const [nearbyMosques, setNearbyMosques] = useState<NearbyMosque[]>([]);
   const [nearbyRadius, setNearbyRadius] = useState(6000);
   const [searchingNearby, setSearchingNearby] = useState(false);
+  const [nearbyStatus, setNearbyStatus] = useState("");
   const [monthRows, setMonthRows] = useState<PrayerRow[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(() => localDateKey());
@@ -378,8 +379,12 @@ export default function App() {
 
   function getDevicePosition(): Promise<GeolocationPosition> {
     return new Promise((resolve, reject) => {
+      if (!window.isSecureContext) {
+        reject(new Error("Location access requires a secure HTTPS connection. Open Noor using its https:// address."));
+        return;
+      }
       if (!("geolocation" in navigator)) {
-        reject(new Error("Location services are not available in this browser."));
+        reject(new Error("This browser does not provide location services. Try opening Noor in Safari."));
         return;
       }
       navigator.geolocation.getCurrentPosition(
@@ -396,13 +401,18 @@ export default function App() {
 
   async function findNearbyMosques() {
     if (!supabase || !sessionEmail) {
-      setMessage("Sign in to Noor before searching for nearby mosques.");
+      const text = "Sign in to Noor before searching for nearby mosques.";
+      setNearbyStatus(text);
+      setMessage(text);
       return;
     }
     setSearchingNearby(true);
+    setNearbyMosques([]);
+    setNearbyStatus("Waiting for your device to share its location. Approve the location request if prompted.");
     setMessage("");
     try {
       const position = await getDevicePosition();
+      setNearbyStatus("Location received. Searching for mosques within " + (nearbyRadius / 1000) + " km…");
       const { data, error } = await supabase.functions.invoke("nearby-mosques", {
         body: {
           latitude: position.coords.latitude,
@@ -411,15 +421,22 @@ export default function App() {
         },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(String(data.error));
       const results = (data?.mosques || []) as NearbyMosque[];
       setNearbyMosques(results);
       if (!results.length) {
-        setMessage("No mapped mosques were found in this radius. Try a wider search.");
+        const text = "No named mosques were found within " + (nearbyRadius / 1000) + " km. Try a wider radius.";
+        setNearbyStatus(text);
+        setMessage(text);
       } else {
-        setMessage("Found " + results.length + " nearby mosque" + (results.length === 1 ? "." : "s."));
+        const text = "Found " + results.length + " nearby mosque" + (results.length === 1 ? "." : "s.") + " Select one below.";
+        setNearbyStatus(text);
+        setMessage("");
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not search for nearby mosques.");
+      const text = error instanceof Error ? error.message : "Could not search for nearby mosques.";
+      setNearbyStatus(text);
+      setMessage(text);
     } finally {
       setSearchingNearby(false);
     }
@@ -680,9 +697,12 @@ export default function App() {
                   {mosques.map(item => <option key={item.id} value={item.id}>{item.name} · {item.city}</option>)}
                 </select>
                 {mosque && <div className="mosque-choice"><MapPin size={16}/><div><strong>{mosque.name}</strong><span>{mosque.address}</span></div><CheckCircle2 size={18}/></div>}
-                <button className="secondary-btn full" onClick={findNearbyMosques} disabled={searchingNearby || busy}>
+                <button type="button" className="secondary-btn full" onClick={findNearbyMosques} disabled={searchingNearby || busy}>
                   <MapPin size={16}/>{searchingNearby ? "Finding nearby mosques…" : "Use my location to find mosques"}
                 </button>
+                {nearbyStatus && <div className={"nearby-feedback" + (searchingNearby ? " pending" : nearbyMosques.length ? " success" : " error")} role="status" aria-live="polite">
+                  {searchingNearby && <span className="nearby-spinner"/>}<span>{nearbyStatus}</span>
+                </div>}
                 <select className="field radius-select" value={nearbyRadius} onChange={event => setNearbyRadius(Number(event.target.value))} aria-label="Nearby search radius">
                   <option value={3000}>Within 3 km</option><option value={6000}>Within 6 km</option><option value={10000}>Within 10 km</option>
                 </select>
@@ -831,9 +851,12 @@ export default function App() {
                   <option value="">Choose a mosque</option>{mosques.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
                 {mosque && <div className="mosque-address"><MapPin size={15}/><span>{mosque.address || mosque.city}</span></div>}
-                <button className="secondary-btn full" onClick={findNearbyMosques} disabled={searchingNearby || busy}>
+                <button type="button" className="secondary-btn full" onClick={findNearbyMosques} disabled={searchingNearby || busy}>
                   <MapPin size={16}/>{searchingNearby ? "Finding nearby mosques…" : "Find mosques near me"}
                 </button>
+                {nearbyStatus && <div className={"nearby-feedback" + (searchingNearby ? " pending" : nearbyMosques.length ? " success" : " error")} role="status" aria-live="polite">
+                  {searchingNearby && <span className="nearby-spinner"/>}<span>{nearbyStatus}</span>
+                </div>}
                 <select className="field radius-select" value={nearbyRadius} onChange={event => setNearbyRadius(Number(event.target.value))} aria-label="Nearby search radius">
                   <option value={3000}>Within 3 km</option><option value={6000}>Within 6 km</option><option value={10000}>Within 10 km</option>
                 </select>
