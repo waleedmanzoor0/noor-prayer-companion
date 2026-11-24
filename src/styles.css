@@ -26,3 +26,124 @@ button{cursor:pointer}
 .bottom-nav{position:sticky;bottom:10px;display:flex;justify-content:space-around;align-items:center;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:18px;padding:8px 5px;margin-top:25px;box-shadow:0 10px 35px rgba(0,0,0,.13);z-index:5}.bottom-nav button{border:0;background:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 22px;font-size:9px}.bottom-nav svg{width:18px;height:18px}.bottom-nav button.selected{color:var(--gold)}.footer-note{text-align:center;color:var(--muted);font-size:9px;padding:15px}.footer-note span{color:var(--gold);padding:0 3px}
 @media(min-width:700px){.app{padding-top:10px}.welcome{padding-top:43px}.hero-card{padding:27px 30px 18px}.next-name{font-size:43px}.countdown{gap:30px}.prayer-row{padding:17px 20px}.setting-card{padding:21px}}
 @media(max-width:380px){.app{padding-left:11px;padding-right:11px}.countdown{gap:14px}.time-unit strong{font-size:20px}.bottom-nav button{padding:4px 16px}.welcome h1{font-size:30px}}
+
+
+/* Noor Phase 1 — minimal, premium and mobile-first */
+.app{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));padding-bottom:calc(22px + env(safe-area-inset-bottom))}
+.shell{max-width:640px;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+.topbar{height:68px;border-bottom-color:var(--line)}
+.brand-button{border:0;background:transparent;color:inherit;padding:0;text-align:left;cursor:pointer}
+.brand-copy{display:flex;flex-direction:column}
+.welcome-compact{padding-top:25px;padding-bottom:17px}
+.welcome h1{font-size:32px}
+.hero-card-premium{padding:21px 21px 15px;border-radius:22px;box-shadow:0 12px 35px rgba(0,0,0,.12)}
+.hero-card-premium .next-name{margin-top:17px;font-size:38px}
+.hero-card-premium .countdown-label{margin-top:17px}
+.hero-card-premium .countdown{gap:24px}
+.next-jamaat{position:relative;margin-top:9px;color:#dfd1a9;font-size:11px}
+.section-head-premium{margin-top:25px}
+.mosque-pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:99px;padding:7px 10px;background:var(--surface);color:var(--muted);font-size:10px;margin-top:7px}
+.home-shortcuts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.shortcut-card{display:flex;align-items:center;gap:10px;min-width:0;padding:13px 12px;border:1px solid var(--line);border-radius:15px;background:var(--surface);color:var(--text);text-align:left}
+.shortcut-card>svg:first-child{width:19px;color:var(--gold);flex-shrink:0}
+.shortcut-card>svg:last-child{width:14px;color:var(--muted);flex-shrink:0}
+.shortcut-card>span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.shortcut-card strong{font-size:11px;font-weight:650}
+.shortcut-card small{font-size:9px;color:var(--muted);line-height:1.35}
+.page-section{padding:23px 0}
+.page-section h1{font-size:31px;margin-top:8px}
+.settings-page>.muted,.timetable-page>.muted{margin-top:0;margin-bottom:18px}
+.settings-group-label{margin:22px 3px 8px;color:var(--gold);font-size:9px;font-weight:700;letter-spacing:1.5px}
+.setting-card{padding:15px 16px;border-radius:16px;margin-top:0;box-shadow:0 4px 18px rgba(0,0,0,.025)}
+.setting-title{gap:10px;padding-bottom:11px;margin-bottom:7px}
+.setting-title>svg{width:18px;height:18px}
+.setting-title strong{font-size:12px}
+.setting-title span{font-size:10px;line-height:1.4}
+.setting-line,.toggle-line{font-size:11px;min-height:43px;padding:9px 0}
+.toggle-line span{line-height:1.35}
+.inline-select{border:1px solid var(--line);background:var(--surface2);color:var(--text);padding:7px 25px 7px 9px;border-radius:9px;font-size:11px}
+.mosque-address{display:flex;align-items:flex-start;gap:8px;color:var(--muted);font-size:10px;padding:8px 0 10px;line-height:1.5}
+.mosque-address svg{flex-shrink:0;color:var(--gold)}
+.global-toggle{margin-bottom:4px;border-bottom:1px solid var(--line)}
+.account-row{display:flex;align-items:center;gap:10px;padding:8px 0 2px;flex-wrap:wrap}
+.account-avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--surface2);color:var(--gold);font-weight:700}
+.account-email{font-size:11px;color:var(--text);flex:1;min-width:130px;overflow-wrap:anywhere}
+.appearance-options{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.appearance-options button{display:flex;justify-content:center;align-items:center;gap:8px;padding:11px;border-radius:11px;border:1px solid var(--line);background:var(--surface2);color:var(--muted);font-size:11px}
+.appearance-options button.selected{border-color:var(--gold2);color:var(--text);background:rgba(185,154,85,.10)}
+.disclosure-button{display:flex;justify-content:space-between;align-items:center;width:100%;border:0;background:transparent;color:var(--text);padding:3px 0;text-align:left}
+.disclosure-button>span{display:flex;align-items:center;gap:11px}
+.disclosure-button>span>svg{color:var(--gold)}
+.disclosure-button>span>span{display:flex;flex-direction:column;gap:3px}
+.disclosure-button strong{font-size:12px}
+.disclosure-button small{font-size:10px;color:var(--muted)}
+.disclosure-button>svg{color:var(--muted);transition:transform .18s}
+.disclosure-button>svg.rotated{transform:rotate(90deg)}
+.import-tools{padding-top:12px}
+.csv-area{min-height:125px}
+.month-toolbar{display:flex;align-items:center;justify-content:space-between;gap:13px;margin:17px 0 13px}
+.month-toolbar>div{display:flex;flex-direction:column;align-items:center;gap:3px}
+.month-toolbar strong{font-family:'Playfair Display',serif;font-size:20px;font-weight:500}
+.month-toolbar span{font-size:9px;color:var(--muted)}
+.calendar-card{padding:15px 13px 12px;background:var(--surface);border:1px solid var(--line);border-radius:18px}
+.calendar-weekdays,.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.calendar-weekdays{margin-bottom:7px}
+.calendar-weekdays span{display:grid;place-items:center;height:25px;color:var(--muted);font-size:10px;font-weight:600}
+.calendar-day,.calendar-empty{height:43px;min-width:0}
+.calendar-day{position:relative;border:1px solid transparent;border-radius:11px;background:transparent;color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11px;font-weight:500}
+.calendar-day.today{border-color:var(--gold2)}
+.calendar-day.selected{background:var(--gold);color:#17251d;font-weight:700}
+.calendar-day i{width:4px;height:4px;border-radius:50%;background:var(--green)}
+.calendar-day.selected i{background:#263a2e}
+.calendar-legend{display:flex;justify-content:center;gap:18px;margin-top:11px;padding-top:10px;border-top:1px solid var(--line);color:var(--muted);font-size:9px}
+.calendar-legend span{display:flex;align-items:center;gap:6px}
+.legend-dot,.legend-today{width:7px;height:7px;display:inline-block;border-radius:50%;background:var(--green)}
+.legend-today{border:1px solid var(--gold2);background:transparent}
+.selected-date-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:25px 2px 12px}
+.selected-date-heading h2{font-family:'Playfair Display',serif;font-size:22px;font-weight:500;margin:4px 0 0}
+.selected-day-list .prayer-row{min-height:63px}
+.compact-empty{padding:22px 17px;margin-top:0}
+.compact-empty h3{font-size:17px;margin-top:10px}
+.compact-empty p{font-size:11px;margin-bottom:0}
+.status-line{line-height:1.45}
+.setup-screen{max-width:500px;margin:0 auto;padding:44px 0 35px;min-height:calc(100vh - 150px);display:flex;flex-direction:column;align-items:flex-start}
+.setup-brand{width:52px;height:52px;border:1px solid var(--gold2);border-radius:17px;display:grid;place-items:center;color:var(--gold);font-family:serif;font-size:31px;background:rgba(217,189,123,.08);margin-bottom:22px}
+.setup-screen h1{font-family:'Playfair Display',serif;font-size:34px;font-weight:500;margin:9px 0 5px}
+.setup-screen>.muted{line-height:1.6;margin:4px 0 19px}
+.setup-progress{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;width:100%;margin:5px 0 14px}
+.setup-progress span{height:4px;border-radius:9px;background:var(--line)}
+.setup-progress span.active{background:var(--gold2)}
+.setup-card{width:100%;padding:21px 19px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:0 12px 35px rgba(0,0,0,.05)}
+.setup-step-label{font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--gold);margin-bottom:17px}
+.setup-icon{width:43px;height:43px;border-radius:14px;display:grid;place-items:center;color:var(--gold);background:var(--surface2);margin-bottom:13px}
+.setup-card h2{font-family:'Playfair Display',serif;font-size:24px;font-weight:500;margin:0 0 7px}
+.setup-card>.muted{font-size:11px;line-height:1.6;margin:0 0 16px}
+.mosque-choice,.notification-explainer{display:flex;align-items:center;gap:10px;padding:12px;margin-top:12px;border-radius:12px;background:var(--surface2);color:var(--gold)}
+.mosque-choice>div,.notification-explainer>div{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+.mosque-choice strong,.notification-explainer strong{font-size:11px;color:var(--text)}
+.mosque-choice span,.notification-explainer span{font-size:9px;color:var(--muted);line-height:1.4}
+.preference-choice{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:15px 0}
+.preference-choice button{display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:13px 11px;border-radius:12px;border:1px solid var(--line);background:var(--surface2);color:var(--text);text-align:left}
+.preference-choice button.selected{border-color:var(--gold2);background:rgba(185,154,85,.1)}
+.preference-choice strong{font-size:12px}
+.preference-choice span{font-size:9px;color:var(--muted);line-height:1.35}
+.setup-actions{display:flex;justify-content:flex-end;align-items:center;gap:9px;margin-top:23px}
+.setup-actions .primary-btn,.setup-actions .secondary-btn{min-height:42px}
+.setup-footnote{font-size:9px;color:var(--muted);line-height:1.6;margin:13px 4px}
+.toast{z-index:8}
+.bottom-nav{padding-bottom:max(8px,env(safe-area-inset-bottom))}
+@media(max-width:390px){
+  .app{padding-left:11px;padding-right:11px}
+  .home-shortcuts{grid-template-columns:1fr}
+  .hero-card-premium .countdown{gap:17px}
+  .time-unit strong{font-size:21px}
+  .calendar-day,.calendar-empty{height:39px}
+  .setup-screen{padding-top:26px}
+}
+@media(min-width:700px){
+  .shell{max-width:680px}
+  .settings-page{display:block}
+  .settings-page .setting-card{padding:18px 20px}
+  .calendar-card{padding:19px}
+  .calendar-day,.calendar-empty{height:48px}
+}
