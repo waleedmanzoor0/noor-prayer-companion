@@ -1,126 +1,110 @@
 # Noor — Prayer Companion
 
-A browser-built React + TypeScript PWA starter for a personal Nottingham prayer-times app.
+A React + TypeScript progressive web app for Nottingham prayer times, timetable imports, and prayer reminders.
 
-## Included
+**Live app:** https://waleedmanzoor.co.uk/noor-prayer-companion/
 
-- Responsive prayer dashboard and countdown
-- Nottingham / Europe-London defaults
-- Hanafi preference display
-- Manual CSV timetable import
-- Supabase email magic-link sign-in
-- Supabase database migration with Row Level Security
-- PWA manifest and service worker
-- Web Push subscription registration
-- Test notification Edge Function
-- Scheduled notification Edge Function
+## Current deployment
 
-## Important before use
+- Frontend: GitHub Pages, deployed automatically from `main` by `.github/workflows/deploy.yml`.
+- Supabase project: `Noor` (EU West / Ireland).
+- Client uses the Supabase project URL and a publishable key. Publishable keys are designed for browser use; never place a Supabase secret/service-role key in frontend code.
+- Vite base path and PWA assets are configured for `/noor-prayer-companion/`.
 
-This repository does **not** contain an official Nottingham mosque timetable. Noor intentionally displays no prayer times until you import a verified timetable. The CSV example shown in the app is illustrative and must not be used as real prayer data.
+## Supabase database
 
-Push delivery requires a deployed HTTPS origin, an installed iPhone Home Screen PWA, notification permission, VAPID secrets, Supabase Edge Functions, and a scheduled invocation. iOS web push notifications do not guarantee custom Adhan audio playback in the background.
+The initial schema is in `supabase/migrations/0001_noor_schema.sql`. It creates:
 
-## 1. Create Supabase project
+- `mosques`
+- `prayer_times`
+- `push_subscriptions`
+- `user_preferences`
+- `notification_logs`
 
-1. Create a project at https://supabase.com/dashboard.
-2. Open SQL Editor.
-3. Run `supabase/migrations/0001_noor_schema.sql`.
-4. In Authentication settings, enable Email OTP / magic links and add your deployed site URL to allowed redirect URLs.
+The incremental access and security hardening is in `supabase/migrations/0002_api_access_and_security_hardening.sql`. Row Level Security is enabled; mosque entries are readable, authenticated users can manage their own prayer timetable rows, and device subscriptions/preferences/notification logs are not directly exposed to app clients.
 
-## 2. Configure app environment
+## Frontend configuration
 
-Copy `.env.example` to `.env.local` and fill in:
+The GitHub Pages workflow supplies:
 
 - `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY` (or Supabase publishable key)
-- `VITE_VAPID_PUBLIC_KEY`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
 
-Only the public/publishable Supabase key belongs in frontend environment variables. Never put the Supabase service-role key or VAPID private key in `VITE_` variables or browser code.
+For local development, copy `.env.example` to `.env.local` and fill in the values. Keep secrets out of source control.
 
-## 3. Run locally in Codespaces
+## Authentication configuration
 
-In the Codespaces terminal:
+In Supabase Dashboard → Authentication → URL Configuration:
 
-```bash
-npm install
-npm run dev
-```
+- Set the Site URL to `https://waleedmanzoor.co.uk/noor-prayer-companion/`.
+- Add that same URL to the allowed Redirect URLs list.
 
-Open the forwarded port 5173 in the browser.
+Noor sends email magic links back to the app subdirectory.
 
-## 4. Deploy frontend
+## Prayer timetable
 
-Connect this GitHub repository to Vercel. Add the three `VITE_` environment variables in Vercel Project Settings → Environment Variables, then deploy.
+No official Nottingham mosque timetable is bundled. Noor intentionally shows no prayer times until a verified timetable is imported.
 
-After changing environment variables, redeploy.
-
-## 5. Deploy Supabase Edge Functions
-
-Install/use Supabase CLI in Codespaces, then authenticate and link the project:
-
-```bash
-npx supabase login
-npx supabase link --project-ref YOUR_PROJECT_REF
-npx supabase functions deploy register-push
-npx supabase functions deploy test-notification
-npx supabase functions deploy dispatch-prayer-notifications
-```
-
-Set Edge Function secrets in Supabase Dashboard → Edge Functions → Secrets:
-
-- `VAPID_PUBLIC_KEY`
-- `VAPID_PRIVATE_KEY`
-- `VAPID_SUBJECT` (for example `mailto:you@example.com`)
-- `CRON_SECRET` (a long random secret)
-
-Supabase automatically provides `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` to Edge Functions. If your project dashboard requires explicit configuration, add them there as documented by Supabase.
-
-Generate VAPID keys in a trusted environment using:
-
-```bash
-npx web-push generate-vapid-keys
-```
-
-Keep the private key secret.
-
-## 6. Schedule the dispatcher
-
-The `dispatch-prayer-notifications` function is designed to run once per minute. Configure Supabase Cron to invoke it with an `x-cron-secret` header containing the same `CRON_SECRET`.
-
-A typical Supabase Cron + pg_net setup uses a Vault secret for the project function URL and cron secret. Follow current Supabase documentation for the exact Vault/pg_net setup for your project. Do not put the service-role key or cron secret in client code.
-
-The dispatcher compares the current Europe/London minute with the imported timetable and sends one push per prayer/user/day. Test carefully before relying on it.
-
-## 7. Import the mosque timetable
-
-1. Sign in to Noor using your email magic link.
+1. Sign in using the email magic link.
 2. Open Settings → Import mosque timetable.
-3. Paste verified rows using this CSV format:
+3. Import rows using:
 
 ```csv
 date,fajr,sunrise,dhuhr,asr,maghrib,isha,source
 2026-11-24,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,Official mosque timetable
 ```
 
-Replace every `HH:MM` with actual times from your chosen mosque. Times are 24-hour local UK times.
+Replace every `HH:MM` with actual verified 24-hour local UK times. The current interface loads today's timetable; monthly timetable browsing is still limited.
 
-## 8. iPhone installation
+## Edge Functions
 
-1. Deploy to HTTPS.
-2. Open the deployed URL in Safari on iPhone.
-3. Share → Add to Home Screen.
-4. Open Noor from the Home Screen.
-5. Sign in, then tap Enable notifications.
-6. Accept the iOS permission prompt.
-7. Send a test notification.
+The following functions are deployed:
 
-Web Push on iOS requires iOS/iPadOS 16.4 or later and a Home Screen web app. Notification delivery depends on iOS settings, connectivity, and push service availability.
+- `register-push` — registers a signed-in user's browser push subscription.
+- `test-notification` — sends a test push to the signed-in user's registered devices.
+- `dispatch-prayer-notifications` — checks the current Europe/London minute and sends prayer notifications.
 
-## Known limitations in this starter
+They use Supabase's injected publishable/secret key environment dictionaries, with legacy-key fallbacks.
 
-- CSV import currently supports simple comma-separated values (no quoted commas).
-- The interface currently loads today's timetable only.
-- The app's countdown uses the device's local display timezone; set the iPhone timezone to UK time for the most intuitive display. The backend dispatcher uses Europe/London.
-- The backend sends a standard push reminder. It does not play a custom Adhan audio file in the background.
-- A production release should add stronger timetable administration, subscription cleanup, richer delivery observability, backup/restore, and thorough end-to-end testing.
+### Remaining push configuration
+
+Add these secrets in Supabase Dashboard → Edge Functions → Secrets:
+
+- `VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `VAPID_SUBJECT` (for example `mailto:admin@example.com`)
+- `CRON_SECRET` (a long random value)
+
+Also set `VITE_VAPID_PUBLIC_KEY` in the GitHub Pages build workflow to the matching VAPID public key. The private key and cron secret must never be committed to GitHub or placed in a `VITE_` variable.
+
+The dispatcher must be invoked once per minute with an `x-cron-secret` header matching `CRON_SECRET`. Configure this through Supabase Cron + pg_net, keeping the cron secret in Supabase Vault. Do not put server secret keys in browser code.
+
+## iPhone installation
+
+1. Open the HTTPS live app in Safari on iPhone.
+2. Tap Share → Add to Home Screen.
+3. Launch Noor from the Home Screen.
+4. Sign in, enable notifications, and send a test notification.
+
+Web Push on iOS requires iOS/iPadOS 16.4 or later and a Home Screen web app. Delivery depends on iOS permission, settings, connectivity, and push service availability. A web push notification cannot guarantee custom Adhan audio playing in the background.
+
+## Local development
+
+```bash
+npm install
+npm run dev
+```
+
+Production build:
+
+```bash
+npm run build
+```
+
+## Known limitations
+
+- CSV parsing is simple and does not support quoted commas.
+- The current interface loads today's timetable only.
+- Prayer reminder preferences and some display preferences are currently stored locally rather than synchronised across devices.
+- Background Adhan audio is not implemented.
+- A production release should add stronger timetable administration, subscription cleanup, delivery observability, backup/restore, and end-to-end testing.
