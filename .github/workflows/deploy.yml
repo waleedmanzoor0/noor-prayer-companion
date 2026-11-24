@@ -28,7 +28,7 @@ jobs:
         run: npm install
       - name: Build Noor
         env:
-          VITE_SUPABASE_URL: https://uuzgfzivxehlugzqtaj.supabase.co
+          VITE_SUPABASE_URL: https://uuzgfzivxehlugzqgtaj.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_MAzXgWivMedrb6eKrYT8Qg_DJKzKDTQ
         run: npm run build
       - name: Configure Pages
