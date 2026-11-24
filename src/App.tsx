@@ -207,9 +207,9 @@ export default function App() {
   async function verifyEmailCode() {
     const client = supabase;
     const normalizedEmail = email.trim().toLowerCase();
-    const token = otp.replace(/\\s/g, "");
+    const token = otp.replace(/\s/g, "");
     if (!client || !normalizedEmail) return;
-    if (!/^\\d{8}$/.test(token)) {
+    if (!/^\d{8}$/.test(token)) {
       setMessage("Enter the eight-digit code from your email.");
       return;
     }
@@ -454,7 +454,7 @@ export default function App() {
                         autoComplete="one-time-code"
                         maxLength={8}
                         value={otp}
-                        onChange={e => setOtp(e.target.value.replace(/\\D/g, "").slice(0, 8))}
+                        onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 8))}
                         placeholder="00000000"
                         aria-label="Eight-digit email verification code"
                         disabled={busy}
