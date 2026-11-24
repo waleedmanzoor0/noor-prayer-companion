@@ -385,8 +385,8 @@ export default function App() {
       navigator.geolocation.getCurrentPosition(
         resolve,
         error => {
-          if (error.code === error.PERMISSION_DENIED) reject(new Error("Location permission was denied. You can enable it in your browser or device settings."));
-          else if (error.code === error.POSITION_UNAVAILABLE) reject(new Error("Your location is currently unavailable. Check that Location Services are enabled."));
+          if (error.code === 1) reject(new Error("Location permission was denied. You can enable it in your browser or device settings."));
+          else if (error.code === 2) reject(new Error("Your location is currently unavailable. Check that Location Services are enabled."));
           else reject(new Error("Finding your location took too long. Please try again."));
         },
         { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 },
