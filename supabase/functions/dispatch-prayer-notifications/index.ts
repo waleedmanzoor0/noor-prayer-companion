@@ -131,6 +131,8 @@ Deno.serve(async (req) => {
     }
     return Response.json({ ok: true, date, time: hhmm, sent });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
+    console.error("Noor notification dispatcher failed:", error);
+    const detail = error instanceof Error ? error.message : JSON.stringify(error) || String(error);
+    return Response.json({ error: detail }, { status: 500 });
   }
 });
