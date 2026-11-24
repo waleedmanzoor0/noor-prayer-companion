@@ -369,7 +369,10 @@ export default function App() {
               {prayerList.map((p, i) => <div className={`prayer-row ${activeName === p.name ? "is-next" : ""}`} key={p.name}>
                 <div className="prayer-symbol">{["✦","☀","◈","☾","✧"][i]}</div>
                 <div className="prayer-info"><strong>{p.name}</strong><span>{p.arabic}</span></div>
-                <div className="prayer-time">{formatClock(p.time)}</div>
+                <div className="prayer-time-wrap">
+                  <div className="prayer-time">{formatClock(p.time)}</div>
+                  {p.jamaat && <div className="prayer-jamaat">Jamaat {formatClock(p.jamaat)}</div>}
+                </div>
                 <div className="prayer-status">{prefs[p.name].enabled ? <Bell size={15}/> : <BellRing size={15} className="dim"/>}</div>
               </div>)}
               {row.sunrise && <div className="sunrise-row"><Sun size={14}/> Sunrise <span>{formatClock(row.sunrise)}</span></div>}
@@ -385,7 +388,7 @@ export default function App() {
           {tab === "timetable" && <section className="page-section">
             <div className="eyebrow">YOUR SCHEDULE</div><h1>Timetable</h1>
             <p className="muted">Your mosque timetable is stored in Supabase. Import monthly rows from Settings.</p>
-            {row ? <div className="prayer-list">{prayerList.map(p => <div className="prayer-row" key={p.name}><div className="prayer-info"><strong>{p.name}</strong><span>{p.arabic}</span></div><div className="prayer-time">{formatClock(p.time)}</div></div>)}</div> : <div className="empty-card"><CalendarDays/><p>No timetable available for today.</p></div>}
+            {row ? <div className="prayer-list">{prayerList.map(p => <div className="prayer-row" key={p.name}><div className="prayer-info"><strong>{p.name}</strong><span>{p.arabic}</span></div><div className="prayer-time-wrap"><div className="prayer-time">{formatClock(p.time)}</div>{p.jamaat && <div className="prayer-jamaat">Jamaat {formatClock(p.jamaat)}</div>}</div></div>)}</div> : <div className="empty-card"><CalendarDays/><p>No timetable available for today.</p></div>}
           </section>}
 
           {tab === "settings" && <section className="page-section">
