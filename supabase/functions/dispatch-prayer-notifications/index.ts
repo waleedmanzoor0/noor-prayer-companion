@@ -44,18 +44,34 @@ function getSecretKey(): string {
 
 Deno.serve(async (req) => {
   try {
-    const expected = Deno.env.get("CRON_SECRET");
-    if (!expected || req.headers.get("x-cron-secret") !== expected) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-
     const url = Deno.env.get("SUPABASE_URL")!;
     const service = getSecretKey();
     const admin = createClient(url, service);
+
+    const { data: expectedSecret, error: cronSecretError } = await admin.rpc(
+      "noor_get_vault_secret",
+      { secret_name: "noor_cron_secret" }
+    );
+    if (cronSecretError || !expectedSecret || req.headers.get("x-cron-secret") !== String(expectedSecret)) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    const { data: vapidPublic, error: vapidPublicError } = await admin.rpc(
+      "noor_get_vault_secret",
+      { secret_name: "noor_vapid_public_key" }
+    );
+    const { data: vapidPrivate, error: vapidPrivateError } = await admin.rpc(
+      "noor_get_vault_secret",
+      { secret_name: "noor_vapid_private_key" }
+    );
+    if (vapidPublicError || vapidPrivateError || !vapidPublic || !vapidPrivate) {
+      throw new Error("Noor push credentials are not available in Supabase Vault.");
+    }
+
     webpush.setVapidDetails(
-      Deno.env.get("VAPID_SUBJECT") || "mailto:admin@example.com",
-      Deno.env.get("VAPID_PUBLIC_KEY")!,
-      Deno.env.get("VAPID_PRIVATE_KEY")!
+      Deno.env.get("VAPID_SUBJECT") || "https://waleedmanzoor.co.uk/",
+      String(vapidPublic),
+      String(vapidPrivate)
     );
 
     const now = new Date();
