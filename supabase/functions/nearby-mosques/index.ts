@@ -111,9 +111,10 @@ out center tags 100;`;
           signal: AbortSignal.timeout(30000),
         });
         if (!response.ok) {
+          const detail = (await response.text().catch(() => "")).slice(0, 240);
           lastError = response.status === 429
-            ? "The map service is busy. Please try again in a minute."
-            : "The mosque directory could not be reached. Please try again.";
+            ? "OpenStreetMap is rate-limiting nearby searches. Please try again in a minute."
+            : "OpenStreetMap returned HTTP " + response.status + (detail ? ": " + detail : ".");
           continue;
         }
         osmData = await response.json();
@@ -193,6 +194,8 @@ out center tags 100;`;
     }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nearby mosque search failed.";
-    return Response.json({ error: message }, { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    console.error("[nearby-mosques] search failed:", message);
+    const status = message.includes("A valid location") ? 400 : 502;
+    return Response.json({ error: message }, { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
