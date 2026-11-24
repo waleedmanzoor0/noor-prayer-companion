@@ -35,6 +35,7 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [pushState, setPushState] = useState("Not enabled");
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [mosqueName, setMosqueName] = useState("Your Nottingham mosque");
   const [csvText, setCsvText] = useState("");
 
@@ -57,7 +58,10 @@ export default function App() {
   }, []);
 
   async function loadTimetable() {
-    if (!supabase) return;
+    if (!supabase || !sessionEmail) {
+      setRow(null);
+      return;
+    }
     setBusy(true);
     setMessage("");
     const date = localDateKey();
@@ -73,7 +77,94 @@ export default function App() {
     setBusy(false);
   }
 
-  useEffect(() => { loadTimetable(); }, []);
+  useEffect(() => {
+    if (sessionEmail) {
+      void loadTimetable();
+    } else {
+      setRow(null);
+    }
+  }, [sessionEmail]);
+
+  useEffect(() => {
+    if (!supabase || !sessionEmail) {
+      setPrefsLoaded(false);
+      return;
+    }
+
+    let active = true;
+    const loadPreferences = async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        if (!user) throw new Error("Please sign in to load your preferences.");
+
+        const { data, error } = await supabase
+          .from("user_preferences")
+          .select("prayer_notification_preferences")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (error) throw error;
+
+        if (data?.prayer_notification_preferences) {
+          const stored = data.prayer_notification_preferences as Partial<Prefs>;
+          if (active) {
+            setPrefs({
+              Fajr: { ...defaultPrefs.Fajr, ...(stored.Fajr || {}) },
+              Dhuhr: { ...defaultPrefs.Dhuhr, ...(stored.Dhuhr || {}) },
+              Asr: { ...defaultPrefs.Asr, ...(stored.Asr || {}) },
+              Maghrib: { ...defaultPrefs.Maghrib, ...(stored.Maghrib || {}) },
+              Isha: { ...defaultPrefs.Isha, ...(stored.Isha || {}) },
+            });
+          }
+        } else {
+          const { error: insertError } = await supabase
+            .from("user_preferences")
+            .upsert({
+              user_id: user.id,
+              location: "Nottingham, UK",
+              timezone: "Europe/London",
+              asr_school: "Hanafi",
+              notifications_enabled: true,
+              prayer_notification_preferences: prefs,
+            }, { onConflict: "user_id" });
+          if (insertError) throw insertError;
+        }
+
+        if (active) setPrefsLoaded(true);
+      } catch (error) {
+        if (active) {
+          setMessage(error instanceof Error ? error.message : "Could not load your prayer preferences.");
+          setPrefsLoaded(true);
+        }
+      }
+    };
+
+    void loadPreferences();
+    return () => { active = false; };
+  }, [sessionEmail]);
+
+  useEffect(() => {
+    if (!supabase || !sessionEmail || !prefsLoaded) return;
+
+    let active = true;
+    const savePreferences = async () => {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) return;
+      const { error } = await supabase.from("user_preferences").upsert({
+        user_id: user.id,
+        location: "Nottingham, UK",
+        timezone: "Europe/London",
+        asr_school: "Hanafi",
+        notifications_enabled: true,
+        prayer_notification_preferences: prefs,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id" });
+      if (error && active) setMessage(error.message);
+    };
+
+    void savePreferences();
+    return () => { active = false; };
+  }, [prefs, prefsLoaded, sessionEmail]);
 
   const next = useMemo(() => nextPrayer(row, now), [row, now]);
   const remaining = next ? countdown(next.at, now) : null;
@@ -123,6 +214,10 @@ export default function App() {
       setMessage("Connect Supabase before enabling push notifications.");
       return;
     }
+    if (!sessionEmail) {
+      setMessage("Sign in to Noor before enabling notifications.");
+      return;
+    }
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
       setMessage("Push notifications are not supported in this browser. On iPhone, install Noor to your Home Screen and open it there.");
       return;
@@ -154,6 +249,10 @@ export default function App() {
 
   async function testNotification() {
     if (!supabase) return;
+    if (!sessionEmail) {
+      setMessage("Sign in to Noor before sending a test notification.");
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.functions.invoke("test-notification");
     setMessage(error ? error.message : "Test notification request sent. Check your iPhone.");
