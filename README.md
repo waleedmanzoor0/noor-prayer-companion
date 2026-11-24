@@ -49,19 +49,21 @@ Noor uses eight-digit email OTP sign-in. In Supabase Dashboard → Authenticatio
 
 ## Prayer timetable
 
-No official Nottingham mosque timetable is bundled. Noor intentionally shows no prayer times until a verified timetable is imported.
+Noor uses the selected mosque's published timetable rather than estimating times. The Fazilat Masjid timetable for November 2026 is imported for 1–30 November.
 
-1. Sign in by entering your email address and the six-digit verification code sent to your inbox.
-2. Open Settings → Import mosque timetable.
-3. Import rows using:
+- Prayer start times power the next-prayer countdown and scheduled notifications.
+- Fajr, Dhuhr, Asr and Isha Jamaat times are stored and displayed separately.
+- Sunrise is shown separately; the supplied timetable does not list a separate Maghrib Jamaat time.
+- Phase 1 includes a month calendar with selectable dates. Future months will show available data after their official timetable is imported.
+
+To import a mosque timetable, sign in and open Settings → Mosque Timetable Management. CSV columns are:
 
 ```csv
-date,fajr,sunrise,dhuhr,asr,maghrib,isha,source
-2026-11-24,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,Official mosque timetable
+date,fajr,sunrise,dhuhr,asr,maghrib,isha,fajr_jamaat,dhuhr_jamaat,asr_jamaat,isha_jamaat,source
+2026-12-01,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,Official mosque timetable
 ```
 
-Replace every `HH:MM` with actual verified 24-hour local UK times. Phase 1 now includes a guided first-time setup flow, a simplified Home dashboard, grouped Settings and a month calendar with selectable date details. The timetable screen shows every available date for the selected mosque. Fazilat Masjid's November 2026 schedule is imported for 1–30 November. Prayer start times are used for countdowns and notification scheduling; Fajr, Dhuhr, Asr and Isha Jamaat times are stored and displayed separately. Maghrib has no separate Jamaat column on the supplied timetable. Fazilat Masjid's November 2026 schedule is imported for 1–30 November. Prayer start times are used for countdowns and notification scheduling; Fajr, Dhuhr, Asr and Isha Jamaat times are stored and displayed separately. Maghrib has no separate Jamaat column on the supplied timetable.
-
+Use YYYY-MM-DD dates and 24-hour HH:MM values. Jamaat columns are optional; do not enter estimated values.
 ## Edge Functions and push delivery
 
 The following functions are deployed:
