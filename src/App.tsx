@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Bell, BellRing, CalendarDays, ChevronRight, Clock3, Compass, Moon,
-  Settings, Sun, Upload, MapPin, ShieldCheck, LogIn, LogOut, RefreshCw,
-  CheckCircle2, AlertCircle, Smartphone, BookOpen, Menu, X
+  AlertCircle, Bell, BellRing, Building2, CalendarDays, CalendarClock,
+  CheckCircle2, ChevronLeft, ChevronRight, Clock3, LogIn, LogOut,
+  MapPin, Moon, RefreshCw, Settings, ShieldCheck, Smartphone, Sun, Upload, X
 } from "lucide-react";
 import { supabase, hasSupabaseConfig } from "./lib/supabase";
-import { countdown, formatClock, hijriDate, localDateKey } from "./lib/date";
-import { nextPrayer, parseCsv, toPrayers } from "./lib/prayers";
+import { countdown, formatClock, hijriDate, localDateKey, prayerDateTime } from "./lib/date";
+import { parseCsv, toPrayers } from "./lib/prayers";
 import type { PrayerRow, PrayerName } from "./lib/types";
 import "./styles.css";
 
-const prayers: PrayerName[] = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
+const prayerNames: PrayerName[] = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
 const defaultPrefs = {
   Fajr: { enabled: true, mode: "both" },
   Dhuhr: { enabled: true, mode: "both" },
@@ -18,33 +18,82 @@ const defaultPrefs = {
   Maghrib: { enabled: true, mode: "both" },
   Isha: { enabled: true, mode: "both" },
 };
-
 type Prefs = typeof defaultPrefs;
+type Mosque = {
+  id: string;
+  name: string;
+  address: string | null;
+  city: string;
+  timetable_source: string | null;
+};
+type Tab = "home" | "timetable" | "settings";
+
+function dateKey(year: number, month: number, day: number) {
+  return year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+}
+function formatDateLabel(value: string, options: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long" }) {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-GB", { ...options, timeZone: "Europe/London" }).format(new Date(Date.UTC(y, m - 1, d, 12)));
+}
+function monthLabel(value: Date) {
+  return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(value);
+}
+function getCalendarCells(value: Date) {
+  const year = value.getFullYear();
+  const month = value.getMonth();
+  const offset = new Date(year, month, 1).getDay();
+  const count = new Date(year, month + 1, 0).getDate();
+  return [
+    ...Array.from({ length: offset }, () => null),
+    ...Array.from({ length: count }, (_, index) => dateKey(year, month, index + 1)),
+  ];
+}
 
 export default function App() {
-  const [row, setRow] = useState<PrayerRow | null>(null);
-  const [prefs, setPrefs] = useState<Prefs>(() => {
-    try { return { ...defaultPrefs, ...JSON.parse(localStorage.getItem("noor-prefs") || "{}") }; }
-    catch { return defaultPrefs; }
-  });
   const [now, setNow] = useState(new Date());
-  const [tab, setTab] = useState<"home" | "timetable" | "settings">("home");
-  const [dark, setDark] = useState(true);
+  const [tab, setTab] = useState<Tab>("home");
+  const [dark, setDark] = useState(() => localStorage.getItem("noor-theme") !== "light");
   const [busy, setBusy] = useState(false);
+  const [loadingRows, setLoadingRows] = useState(false);
   const [message, setMessage] = useState("");
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
-  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
-  const [pushState, setPushState] = useState("Not enabled");
+  const [mosques, setMosques] = useState<Mosque[]>([]);
+  const [selectedMosqueId, setSelectedMosqueId] = useState("");
+  const [monthRows, setMonthRows] = useState<PrayerRow[]>([]);
+  const [monthCursor, setMonthCursor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [selectedDate, setSelectedDate] = useState(() => localDateKey());
+  const [prefs, setPrefs] = useState<Prefs>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("noor-prefs") || "{}") as Partial<Prefs>;
+      return {
+        Fajr: { ...defaultPrefs.Fajr, ...(stored.Fajr || {}) },
+        Dhuhr: { ...defaultPrefs.Dhuhr, ...(stored.Dhuhr || {}) },
+        Asr: { ...defaultPrefs.Asr, ...(stored.Asr || {}) },
+        Maghrib: { ...defaultPrefs.Maghrib, ...(stored.Maghrib || {}) },
+        Isha: { ...defaultPrefs.Isha, ...(stored.Isha || {}) },
+      };
+    } catch { return defaultPrefs; }
+  });
+  const [asrSchool, setAsrSchool] = useState("Hanafi");
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
-  const [mosqueName, setMosqueName] = useState("Your Nottingham mosque");
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [setupStep, setSetupStep] = useState(0);
+  const [pushState, setPushState] = useState("Checking…");
+  const [showImportTools, setShowImportTools] = useState(false);
   const [csvText, setCsvText] = useState("");
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("noor-theme", dark ? "dark" : "light");
+  }, [dark]);
 
   useEffect(() => {
     localStorage.setItem("noor-prefs", JSON.stringify(prefs));
@@ -58,63 +107,42 @@ export default function App() {
       if (session) {
         setOtpSent(false);
         setOtp("");
+      } else {
+        setPrefsLoaded(false);
+        setSetupRequired(false);
+        setSelectedMosqueId("");
+        setMonthRows([]);
       }
     });
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  async function loadTimetable() {
-    if (!supabase || !sessionEmail) {
-      setRow(null);
-      return;
-    }
-    setBusy(true);
-    setMessage("");
-    const date = localDateKey();
-    const { data, error } = await supabase
-      .from("prayer_times")
-      .select("*")
-      .eq("prayer_date", date)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) setMessage(error.message);
-    else setRow(data as PrayerRow | null);
-    setBusy(false);
-  }
-
   useEffect(() => {
-    if (sessionEmail) {
-      void loadTimetable();
-    } else {
-      setRow(null);
-    }
-  }, [sessionEmail]);
-
-  useEffect(() => {
-    const client = supabase;
-    if (!client || !sessionEmail) {
-      setPrefsLoaded(false);
-      return;
-    }
-
+    if (!supabase || !sessionEmail) return;
     let active = true;
-    const loadPreferences = async () => {
+    const loadSetup = async () => {
+      setBusy(true);
       try {
-        const { data: { user }, error: userError } = await client.auth.getUser();
-        if (userError) throw userError;
-        if (!user) throw new Error("Please sign in to load your preferences.");
+        const [{ data: mosqueData, error: mosqueError }, { data: { user }, error: userError }] = await Promise.all([
+          supabase.from("mosques").select("id,name,address,city,timetable_source").order("name"),
+          supabase.auth.getUser(),
+        ]);
+        if (mosqueError) throw mosqueError;
+        if (userError || !user) throw userError || new Error("Please sign in again.");
+        const available = (mosqueData || []) as Mosque[];
+        if (active) setMosques(available);
 
-        const { data, error } = await client
-          .from("user_preferences")
-          .select("prayer_notification_preferences")
-          .eq("user_id", user.id)
-          .maybeSingle();
+        const { data, error } = await supabase.from("user_preferences")
+          .select("preferred_mosque_id,location,timezone,asr_school,notifications_enabled,prayer_notification_preferences")
+          .eq("user_id", user.id).maybeSingle();
         if (error) throw error;
 
-        if (data?.prayer_notification_preferences) {
-          const stored = data.prayer_notification_preferences as Partial<Prefs>;
+        if (data) {
+          const stored = (data.prayer_notification_preferences || {}) as Partial<Prefs>;
           if (active) {
+            setSelectedMosqueId(data.preferred_mosque_id || "");
+            setAsrSchool(data.asr_school || "Hanafi");
+            setNotificationsEnabled(data.notifications_enabled !== false);
             setPrefs({
               Fajr: { ...defaultPrefs.Fajr, ...(stored.Fajr || {}) },
               Dhuhr: { ...defaultPrefs.Dhuhr, ...(stored.Dhuhr || {}) },
@@ -122,86 +150,136 @@ export default function App() {
               Maghrib: { ...defaultPrefs.Maghrib, ...(stored.Maghrib || {}) },
               Isha: { ...defaultPrefs.Isha, ...(stored.Isha || {}) },
             });
+            setSetupRequired(!data.preferred_mosque_id);
           }
-        } else {
-          const { error: insertError } = await client
-            .from("user_preferences")
-            .upsert({
-              user_id: user.id,
-              location: "Nottingham, UK",
-              timezone: "Europe/London",
-              asr_school: "Hanafi",
-              notifications_enabled: true,
-              prayer_notification_preferences: prefs,
-            }, { onConflict: "user_id" });
-          if (insertError) throw insertError;
+        } else if (active) {
+          setSetupRequired(true);
+          if (available[0]) setSelectedMosqueId(available[0].id);
         }
-
         if (active) setPrefsLoaded(true);
       } catch (error) {
-        if (active) {
-          setMessage(error instanceof Error ? error.message : "Could not load your prayer preferences.");
-          setPrefsLoaded(true);
-        }
+        if (active) setMessage(error instanceof Error ? error.message : "Could not load your Noor settings.");
+      } finally {
+        if (active) setBusy(false);
       }
     };
-
-    void loadPreferences();
+    void loadSetup();
     return () => { active = false; };
   }, [sessionEmail]);
 
-  useEffect(() => {
-    const client = supabase;
-    if (!client || !sessionEmail || !prefsLoaded) return;
+  async function loadTimetable() {
+    if (!supabase || !sessionEmail) {
+      setMonthRows([]);
+      return;
+    }
+    setLoadingRows(true);
+    try {
+      let query = supabase.from("prayer_times").select("*").order("prayer_date", { ascending: true }).limit(1200);
+      if (selectedMosqueId) query = query.eq("mosque_id", selectedMosqueId);
+      else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        query = query.eq("user_id", user.id);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      setMonthRows((data || []) as PrayerRow[]);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not load the mosque timetable.");
+    } finally {
+      setLoadingRows(false);
+    }
+  }
 
+  useEffect(() => {
+    if (sessionEmail && prefsLoaded) void loadTimetable();
+  }, [sessionEmail, selectedMosqueId, prefsLoaded]);
+
+  useEffect(() => {
+    if (!supabase || !sessionEmail || !prefsLoaded || !selectedMosqueId) return;
     let active = true;
-    const savePreferences = async () => {
-      const { data: { user }, error: userError } = await client.auth.getUser();
-      if (userError || !user) return;
-      const { error } = await client.from("user_preferences").upsert({
+    const save = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { error } = await supabase.from("user_preferences").upsert({
         user_id: user.id,
+        preferred_mosque_id: selectedMosqueId,
         location: "Nottingham, UK",
         timezone: "Europe/London",
-        asr_school: "Hanafi",
-        notifications_enabled: true,
+        asr_school: asrSchool,
+        notifications_enabled: notificationsEnabled,
         prayer_notification_preferences: prefs,
         updated_at: new Date().toISOString(),
       }, { onConflict: "user_id" });
       if (error && active) setMessage(error.message);
     };
-
-    void savePreferences();
+    void save();
     return () => { active = false; };
-  }, [prefs, prefsLoaded, sessionEmail]);
+  }, [prefs, asrSchool, notificationsEnabled, selectedMosqueId, prefsLoaded, sessionEmail]);
 
-  const next = useMemo(() => nextPrayer(row, now), [row, now]);
+  useEffect(() => {
+    if (!sessionEmail) {
+      setPushState("Not signed in");
+      return;
+    }
+    if (!("Notification" in window)) {
+      setPushState("Not supported in this browser");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setPushState("Blocked in device settings");
+      return;
+    }
+    if (Notification.permission !== "granted") {
+      setPushState("Not enabled on this device");
+      return;
+    }
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription())
+        .then(subscription => setPushState(subscription ? "Enabled on this device" : "Permission granted — not subscribed"))
+        .catch(() => setPushState("Permission granted — status unavailable"));
+    }
+  }, [sessionEmail]);
+
+  const todayKey = localDateKey(now);
+  const todayRow = monthRows.find(item => item.prayer_date === todayKey) || null;
+  const selectedRow = monthRows.find(item => item.prayer_date === selectedDate) || null;
+  const mosque = mosques.find(item => item.id === selectedMosqueId) || null;
+  const prayerList = todayRow ? toPrayers(todayRow) : [];
+  const next = useMemo(() => {
+    for (const day of [...monthRows].sort((a, b) => a.prayer_date.localeCompare(b.prayer_date))) {
+      if (day.prayer_date < todayKey) continue;
+      for (const prayer of toPrayers(day)) {
+        const at = prayerDateTime(day.prayer_date, prayer.time);
+        if (at.getTime() > now.getTime()) return { ...prayer, at, date: day.prayer_date };
+      }
+    }
+    return null;
+  }, [monthRows, now, todayKey]);
   const remaining = next ? countdown(next.at, now) : null;
   const dateLabel = new Intl.DateTimeFormat("en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London"
   }).format(now);
+  const monthRowsOnly = monthRows.filter(item => item.prayer_date.startsWith(dateKey(monthCursor.getFullYear(), monthCursor.getMonth(), 1).slice(0, 7)));
+  const calendarCells = getCalendarCells(monthCursor);
+  const selectedLabel = formatDateLabel(selectedDate, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   async function signIn() {
     const client = supabase;
     const normalizedEmail = email.trim().toLowerCase();
     if (!client || !normalizedEmail) return;
-
     setBusy(true);
     setMessage("");
     try {
-      const { error } = await client.auth.signInWithOtp({
-        email: normalizedEmail,
-        options: { shouldCreateUser: true },
-      });
+      const { error } = await client.auth.signInWithOtp({ email: normalizedEmail, options: { shouldCreateUser: true } });
       if (error) throw error;
       setEmail(normalizedEmail);
       setOtp("");
       setOtpSent(true);
-      setMessage(`A six-digit sign-in code has been sent to ${normalizedEmail}.`);
+      setMessage("A verification code has been sent to " + normalizedEmail + ".");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not send your verification code.");
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   async function verifyEmailCode() {
@@ -213,24 +291,17 @@ export default function App() {
       setMessage("Enter the eight-digit code from your email.");
       return;
     }
-
     setBusy(true);
     setMessage("");
     try {
-      const { error } = await client.auth.verifyOtp({
-        email: normalizedEmail,
-        token,
-        type: "email",
-      });
+      const { error } = await client.auth.verifyOtp({ email: normalizedEmail, token, type: "email" });
       if (error) throw error;
       setOtp("");
       setOtpSent(false);
       setMessage("You're signed in to Noor. Welcome back!");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "That code could not be verified. Check it and try again.");
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   async function signOut() {
@@ -239,45 +310,18 @@ export default function App() {
     setMessage("Signed out.");
   }
 
-  async function importCsv() {
-    if (!supabase || !sessionEmail) {
-      setMessage("Sign in first to import your mosque timetable.");
-      return;
-    }
-    try {
-      const parsed = parseCsv(csvText);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Please sign in before importing a timetable.");
-      setBusy(true);
-      const rows = parsed.map((item) => ({ ...item, user_id: user.id }));
-      const { error } = await supabase.from("prayer_times").upsert(rows, { onConflict: "user_id,prayer_date" });
-      if (error) throw error;
-      setMessage(`Imported ${parsed.length} timetable row(s).`);
-      setCsvText("");
-      await loadTimetable();
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not import timetable.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function enablePush() {
-    if (!supabase) {
-      setMessage("Connect Supabase before enabling push notifications.");
-      return;
-    }
-    if (!sessionEmail) {
+    if (!supabase || !sessionEmail) {
       setMessage("Sign in to Noor before enabling notifications.");
       return;
     }
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-      setMessage("Push notifications are not supported in this browser. On iPhone, install Noor to your Home Screen and open it there.");
+      setMessage("Push notifications are not supported here. On iPhone, add Noor to your Home Screen and open it there.");
       return;
     }
     const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
     if (!publicKey) {
-      setMessage("Add VITE_VAPID_PUBLIC_KEY to your deployment environment first.");
+      setMessage("Push notifications are not configured for this deployment.");
       return;
     }
     setBusy(true);
@@ -287,204 +331,376 @@ export default function App() {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey)
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
       });
       const { error } = await supabase.functions.invoke("register-push", { body: { subscription: subscription.toJSON() } });
       if (error) throw error;
-      setPushState("Enabled");
+      setPushState("Enabled on this device");
       setMessage("This device is subscribed to Noor notifications.");
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not enable notifications.");
-    } finally {
-      setBusy(false);
-    }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not enable notifications.");
+    } finally { setBusy(false); }
   }
 
   async function testNotification() {
-    if (!supabase) return;
-    if (!sessionEmail) {
-      setMessage("Sign in to Noor before sending a test notification.");
+    if (!supabase || !sessionEmail) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase.functions.invoke("test-notification");
+      if (error) throw error;
+      setMessage("Test notification sent. Check this device.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not send a test notification.");
+    } finally { setBusy(false); }
+  }
+
+  async function savePreferences() {
+    if (!supabase || !sessionEmail) throw new Error("Sign in before saving your preferences.");
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) throw userError || new Error("Please sign in again.");
+    const { error } = await supabase.from("user_preferences").upsert({
+      user_id: user.id,
+      preferred_mosque_id: selectedMosqueId || null,
+      location: "Nottingham, UK",
+      timezone: "Europe/London",
+      asr_school: asrSchool,
+      notifications_enabled: notificationsEnabled,
+      prayer_notification_preferences: prefs,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+    if (error) throw error;
+    return user.id;
+  }
+
+  async function finishSetup() {
+    if (!supabase || !selectedMosqueId) {
+      setMessage("Please choose your mosque before continuing.");
       return;
     }
     setBusy(true);
-    const { error } = await supabase.functions.invoke("test-notification");
-    setMessage(error ? error.message : "Test notification request sent. Check your iPhone.");
-    setBusy(false);
+    try {
+      const userId = await savePreferences();
+      const { data: sharedRows, error: rowsError } = await supabase.from("prayer_times")
+        .select("*").eq("mosque_id", selectedMosqueId).order("prayer_date", { ascending: true });
+      if (rowsError) throw rowsError;
+
+      if (sharedRows?.length) {
+        const dates = [...new Set(sharedRows.map((item: PrayerRow) => item.prayer_date))];
+        const { data: existing, error: ownError } = await supabase.from("prayer_times")
+          .select("prayer_date").eq("user_id", userId).in("prayer_date", dates);
+        if (ownError) throw ownError;
+        const ownedDates = new Set((existing || []).map((item: { prayer_date: string }) => item.prayer_date));
+        const copies = sharedRows.filter((item: PrayerRow) => !ownedDates.has(item.prayer_date)).map((item: PrayerRow) => {
+          const { id: _id, created_at: _createdAt, ...rest } = item as PrayerRow & { created_at?: string };
+          return { ...rest, user_id: userId };
+        });
+        if (copies.length) {
+          const { error: copyError } = await supabase.from("prayer_times").upsert(copies, { onConflict: "user_id,prayer_date" });
+          if (copyError) throw copyError;
+        }
+      }
+      setSetupRequired(false);
+      setSetupStep(0);
+      setMessage("Noor is ready. Your mosque timetable and preferences are saved.");
+      await loadTimetable();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not finish Noor setup.");
+    } finally { setBusy(false); }
   }
 
-  const prayerList = row ? toPrayers(row) : [];
-  const activeName = next?.name;
+  async function importCsv() {
+    if (!supabase || !sessionEmail) {
+      setMessage("Sign in first to import a timetable.");
+      return;
+    }
+    try {
+      const parsed = parseCsv(csvText);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Please sign in before importing a timetable.");
+      setBusy(true);
+      const rows = parsed.map(item => ({ ...item, user_id: user.id, mosque_id: selectedMosqueId || null }));
+      const { error } = await supabase.from("prayer_times").upsert(rows, { onConflict: "user_id,prayer_date" });
+      if (error) throw error;
+      setMessage("Imported " + parsed.length + " timetable day(s).");
+      setCsvText("");
+      setShowImportTools(false);
+      await loadTimetable();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not import the timetable.");
+    } finally { setBusy(false); }
+  }
+
+  function changeMonth(offset: number) {
+    const nextMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + offset, 1);
+    setMonthCursor(nextMonth);
+    setSelectedDate(dateKey(nextMonth.getFullYear(), nextMonth.getMonth(), 1));
+  }
+
+  const signedOutCard = (
+    <div className="setting-card">
+      <div className="setting-title"><LogIn/><div><strong>Account</strong><span>{sessionEmail || "Sign in to sync your mosque timetable"}</span></div></div>
+      {!hasSupabaseConfig ? <div className="notice warning"><AlertCircle size={16}/> Noor's database connection is not configured.</div> :
+        sessionEmail ? <div className="account-row"><div className="account-avatar">{sessionEmail.slice(0, 1).toUpperCase()}</div><div className="account-email">{sessionEmail}</div><button className="secondary-btn" onClick={signOut}><LogOut size={15}/> Sign out</button></div> :
+        <>
+          <label className="field-label" htmlFor="noor-login-email">Email address</label>
+          <input id="noor-login-email" className="field" type="email" autoComplete="email" inputMode="email" value={email}
+            onChange={event => setEmail(event.target.value)} placeholder="you@example.com" disabled={otpSent || busy}/>
+          {!otpSent ? <button className="primary-btn full" onClick={signIn} disabled={busy || !email.trim()}>
+            <LogIn size={16}/>{busy ? "Sending code…" : "Send verification code"}
+          </button> : <>
+            <p className="small-note">Enter the eight-digit code sent to <strong>{email}</strong>.</p>
+            <label className="field-label" htmlFor="noor-login-code">Verification code</label>
+            <input id="noor-login-code" className="field otp-field" type="text" inputMode="numeric" pattern="[0-9]*"
+              autoComplete="one-time-code" maxLength={8} value={otp}
+              onChange={event => setOtp(event.target.value.replace(/\D/g, "").slice(0, 8))}
+              placeholder="00000000" aria-label="Eight-digit email verification code" disabled={busy}/>
+            <button className="primary-btn full" onClick={verifyEmailCode} disabled={busy || otp.length !== 8}>
+              <ShieldCheck size={16}/>{busy ? "Verifying…" : "Verify code & sign in"}
+            </button>
+            <button className="secondary-btn full" onClick={signIn} disabled={busy}><RefreshCw size={15}/> Send a new code</button>
+            <button className="text-btn full" onClick={() => { setOtpSent(false); setOtp(""); setMessage(""); }} disabled={busy}>Use a different email</button>
+          </>}
+        </>}
+    </div>
+  );
 
   return (
     <div className={dark ? "app dark" : "app light"}>
       <div className="shell">
         <header className="topbar">
-          <div className="brand">
+          <button className="brand brand-button" onClick={() => setTab("home")} aria-label="Go to Noor home">
             <div className="brand-mark">ن</div>
-            <div><div className="brand-name">noor<span>.</span></div><div className="brand-sub">PRAYER COMPANION</div></div>
-          </div>
+            <div className="brand-copy"><div className="brand-name">noor<span>.</span></div><div className="brand-sub">PRAYER COMPANION</div></div>
+          </button>
           <div className="top-actions">
             <button className="icon-btn" aria-label="Toggle appearance" onClick={() => setDark(!dark)}>{dark ? <Sun size={18}/> : <Moon size={18}/>}</button>
             <button className="icon-btn" aria-label="Settings" onClick={() => setTab("settings")}><Settings size={18}/></button>
           </div>
         </header>
 
-        <main>
-          {tab === "home" && <>
-            <section className="welcome">
-              <div className="eyebrow"><MapPin size={13}/> NOTTINGHAM, UNITED KINGDOM</div>
-              <h1>Assalamu Alaikum<span className="gold">.</span></h1>
-              <p className="muted">{dateLabel} <span className="dot">·</span> {hijriDate(now)}</p>
-            </section>
-
-            <section className="hero-card">
-              <div className="hero-pattern"></div>
-              <div className="hero-top"><span className="eyebrow pale">NEXT PRAYER</span><span className="live-dot">● LIVE</span></div>
-              {next && remaining ? <>
-                <div className="next-name">{next.name}</div>
-                <div className="arabic">{next.arabic}</div>
-                <div className="next-time">{formatClock(next.time)}</div>
-                <div className="countdown-label">TIME REMAINING</div>
-                <div className="countdown">
-                  {remaining.days > 0 && <TimeUnit value={remaining.days} label="DAYS"/>}
-                  <TimeUnit value={remaining.hours} label="HOURS"/>
-                  <TimeUnit value={remaining.minutes} label="MINUTES"/>
-                  <TimeUnit value={remaining.seconds} label="SECONDS"/>
+        {setupRequired && sessionEmail && prefsLoaded ? (
+          <main className="setup-screen">
+            <div className="setup-brand">ن</div>
+            <div className="eyebrow">WELCOME TO NOOR</div>
+            <h1>Let's make it yours.</h1>
+            <p className="muted">A few quick choices will prepare your daily prayer companion.</p>
+            <div className="setup-progress">
+              {[0, 1, 2].map(step => <span key={step} className={step <= setupStep ? "active" : ""}/>)}
+            </div>
+            <div className="setup-card">
+              <div className="setup-step-label">STEP {setupStep + 1} OF 3</div>
+              {setupStep === 0 && <>
+                <div className="setup-icon"><Building2 size={23}/></div>
+                <h2>Choose your mosque</h2>
+                <p className="muted">Noor will use its timetable for your daily prayer times and reminders.</p>
+                <label className="field-label" htmlFor="setup-mosque">Your mosque</label>
+                <select id="setup-mosque" className="field" value={selectedMosqueId} onChange={event => setSelectedMosqueId(event.target.value)}>
+                  <option value="">Choose a mosque</option>
+                  {mosques.map(item => <option key={item.id} value={item.id}>{item.name} · {item.city}</option>)}
+                </select>
+                {mosque && <div className="mosque-choice"><MapPin size={16}/><div><strong>{mosque.name}</strong><span>{mosque.address}</span></div><CheckCircle2 size={18}/></div>}
+              </>}
+              {setupStep === 1 && <>
+                <div className="setup-icon"><Moon size={23}/></div>
+                <h2>Prayer preferences</h2>
+                <p className="muted">Your selected mosque timetable provides the times. Choose the Asr school used for your practice.</p>
+                <div className="preference-choice">
+                  <button className={asrSchool === "Hanafi" ? "selected" : ""} onClick={() => setAsrSchool("Hanafi")}><strong>Hanafi</strong><span>Later Asr calculation</span></button>
+                  <button className={asrSchool === "Standard" ? "selected" : ""} onClick={() => setAsrSchool("Standard")}><strong>Standard</strong><span>Earlier Asr calculation</span></button>
                 </div>
-              </> : <div className="empty-next"><Clock3 size={24}/><strong>{row ? "Today's prayers are complete" : "Your timetable is waiting"}</strong><span>{row ? "Tomorrow's timetable will appear when added." : "Add your local mosque timetable to get started."}</span></div>}
-              <div className="hero-footer"><span><ShieldCheck size={14}/> Hanafi Asr</span><span>Europe/London</span></div>
-            </section>
+                <p className="small-note">Fazilat Masjid's timetable timings remain authoritative when selected. This choice is saved as your preference.</p>
+              </>}
+              {setupStep === 2 && <>
+                <div className="setup-icon"><BellRing size={23}/></div>
+                <h2>Stay in the moment</h2>
+                <p className="muted">Allow notifications so Noor can remind you when each prayer begins.</p>
+                <div className="notification-explainer"><Smartphone size={20}/><div><strong>Prayer reminders on this device</strong><span>You can change these settings at any time.</span></div></div>
+                <button className="secondary-btn full" onClick={enablePush} disabled={busy}><Bell size={16}/> {pushState.startsWith("Enabled") ? "Notifications enabled" : "Enable notifications"}</button>
+                <button className="text-btn full" onClick={() => setNotificationsEnabled(false)}>I'll do this later</button>
+              </>}
+              <div className="setup-actions">
+                {setupStep > 0 && <button className="secondary-btn" onClick={() => setSetupStep(step => step - 1)} disabled={busy}>Back</button>}
+                {setupStep < 2 ? <button className="primary-btn" onClick={() => {
+                  if (setupStep === 0 && !selectedMosqueId) { setMessage("Choose your mosque to continue."); return; }
+                  setSetupStep(step => step + 1);
+                }}>Continue <ChevronRight size={16}/></button> :
+                  <button className="primary-btn" onClick={finishSetup} disabled={busy || !selectedMosqueId}>{busy ? "Setting up Noor…" : "Finish setup"} <CheckCircle2 size={16}/></button>}
+              </div>
+            </div>
+            <p className="setup-footnote">You can update your mosque and preferences in Settings whenever you need.</p>
+          </main>
+        ) : (
+          <main>
+            {tab === "home" && <>
+              <section className="welcome welcome-compact">
+                <div className="eyebrow"><MapPin size={13}/> {mosque?.city || "YOUR PRAYER COMPANION"}</div>
+                <h1>Assalamu Alaikum<span className="gold">.</span></h1>
+                <p className="muted">{dateLabel} <span className="dot">·</span> {hijriDate(now)}</p>
+                {mosque && <button className="mosque-pill" onClick={() => setTab("settings")}><Building2 size={13}/>{mosque.name}<ChevronRight size={13}/></button>}
+              </section>
 
-            <section className="section-head">
-              <div><div className="eyebrow">YOUR DAILY SCHEDULE</div><h2>Prayer times</h2></div>
-              <button className="text-btn" onClick={loadTimetable} disabled={busy}><RefreshCw size={14}/> Refresh</button>
-            </section>
+              <section className="hero-card hero-card-premium">
+                <div className="hero-pattern"></div>
+                <div className="hero-top"><span className="eyebrow pale">NEXT PRAYER</span><span className="live-dot">● LIVE</span></div>
+                {next && remaining ? <>
+                  <div className="next-name">{next.name}</div>
+                  <div className="arabic">{next.arabic}</div>
+                  <div className="next-time">{formatClock(next.time)}</div>
+                  <div className="countdown-label">TIME REMAINING</div>
+                  <div className="countdown">
+                    {remaining.days > 0 && <TimeUnit value={remaining.days} label="DAYS"/>}
+                    <TimeUnit value={remaining.hours} label="HOURS"/>
+                    <TimeUnit value={remaining.minutes} label="MINUTES"/>
+                    <TimeUnit value={remaining.seconds} label="SECONDS"/>
+                  </div>
+                  {next.jamaat && <div className="next-jamaat">Jamaat {formatClock(next.jamaat)}</div>}
+                  {next.date !== todayKey && <div className="next-jamaat">Tomorrow · {formatDateLabel(next.date, { weekday: "long", day: "numeric", month: "short" })}</div>}
+                </> : <div className="empty-next"><Clock3 size={24}/><strong>{monthRows.length ? "No upcoming prayer time found" : "Your timetable is waiting"}</strong><span>{monthRows.length ? "Check your next month's timetable or refresh the schedule." : "Choose a mosque with an available timetable to get started."}</span></div>}
+                <div className="hero-footer"><span><ShieldCheck size={14}/> {asrSchool} Asr</span><span>Europe/London</span></div>
+              </section>
 
-            {!row ? <div className="empty-card">
-              <div className="empty-icon"><CalendarDays size={23}/></div>
-              <h3>No mosque timetable added yet</h3>
-              <p>For accuracy, Noor does not invent prayer times. Import your chosen Nottingham mosque's official timetable in Settings.</p>
-              <button className="primary-btn" onClick={() => setTab("settings")}><Upload size={16}/> Add timetable</button>
-            </div> : <div className="prayer-list">
-              {prayerList.map((p, i) => <div className={`prayer-row ${activeName === p.name ? "is-next" : ""}`} key={p.name}>
-                <div className="prayer-symbol">{["✦","☀","◈","☾","✧"][i]}</div>
-                <div className="prayer-info"><strong>{p.name}</strong><span>{p.arabic}</span></div>
-                <div className="prayer-time-wrap">
-                  <div className="prayer-time">{formatClock(p.time)}</div>
-                  {p.jamaat && <div className="prayer-jamaat">Jamaat {formatClock(p.jamaat)}</div>}
+              <section className="section-head section-head-premium">
+                <div><div className="eyebrow">TODAY'S SCHEDULE</div><h2>Prayer times</h2></div>
+                <button className="text-btn" onClick={() => { setSelectedDate(todayKey); setMonthCursor(new Date(now.getFullYear(), now.getMonth(), 1)); setTab("timetable"); }}><CalendarDays size={14}/> Full timetable</button>
+              </section>
+
+              {!todayRow ? <div className="empty-card">
+                <div className="empty-icon"><CalendarDays size={23}/></div>
+                <h3>No timetable for today</h3>
+                <p>Noor doesn't estimate times when a verified mosque timetable isn't available. Check the monthly schedule or choose another mosque.</p>
+                <button className="primary-btn" onClick={() => setTab("timetable")}>View timetable <ChevronRight size={16}/></button>
+              </div> : <div className="prayer-list">
+                {prayerList.map((prayer, index) => <div className={"prayer-row " + (next?.name === prayer.name && next.date === todayKey ? "is-next" : "")} key={prayer.name}>
+                  <div className="prayer-symbol">{["✦","☀","◈","☾","✧"][index]}</div>
+                  <div className="prayer-info"><strong>{prayer.name}</strong><span>{prayer.arabic}</span></div>
+                  <div className="prayer-time-wrap">
+                    <div className="prayer-time">{formatClock(prayer.time)}</div>
+                    {prayer.jamaat && <div className="prayer-jamaat">Jamaat {formatClock(prayer.jamaat)}</div>}
+                  </div>
+                  <div className="prayer-status">{prefs[prayer.name].enabled ? <Bell size={15}/> : <Bell size={15} className="dim"/>}</div>
+                </div>)}
+                {todayRow.sunrise && <div className="sunrise-row"><Sun size={14}/> Sunrise <span>{formatClock(todayRow.sunrise)}</span></div>}
+                <div className="source-note">{mosque?.name || "Local mosque"} · {todayRow.source || "Mosque timetable"}</div>
+              </div>}
+
+              <section className="home-shortcuts">
+                <button className="shortcut-card" onClick={() => setTab("timetable")}><CalendarDays/><span><strong>Monthly timetable</strong><small>Browse dates and Jamaat times</small></span><ChevronRight size={16}/></button>
+                <button className="shortcut-card" onClick={() => setTab("settings")}><Bell/><span><strong>Prayer reminders</strong><small>{notificationsEnabled ? "Manage your alerts" : "Reminders are paused"}</small></span><ChevronRight size={16}/></button>
+              </section>
+            </>}
+
+            {tab === "timetable" && <section className="page-section timetable-page">
+              <div className="eyebrow">YOUR MOSQUE SCHEDULE</div>
+              <h1>Timetable</h1>
+              <p className="muted">{mosque?.name || "Choose a mosque"} · {mosque?.city || "Nottingham"}</p>
+              <div className="month-toolbar">
+                <button className="icon-btn" aria-label="Previous month" onClick={() => changeMonth(-1)}><ChevronLeft size={18}/></button>
+                <div><strong>{monthLabel(monthCursor)}</strong><span>{monthRowsOnly.length} timetable days available</span></div>
+                <button className="icon-btn" aria-label="Next month" onClick={() => changeMonth(1)}><ChevronRight size={18}/></button>
+              </div>
+              <div className="calendar-card">
+                <div className="calendar-weekdays">{["S","M","T","W","T","F","S"].map((day, index) => <span key={day + index}>{day}</span>)}</div>
+                <div className="calendar-grid">
+                  {calendarCells.map((day, index) => {
+                    if (!day) return <span className="calendar-empty" key={"empty-" + index}/>;
+                    const hasTimes = monthRows.some(item => item.prayer_date === day);
+                    const isToday = day === todayKey;
+                    const isSelected = day === selectedDate;
+                    return <button key={day} className={"calendar-day" + (isToday ? " today" : "") + (isSelected ? " selected" : "") + (hasTimes ? " has-times" : "")}
+                      onClick={() => setSelectedDate(day)} aria-label={formatDateLabel(day, { weekday: "long", day: "numeric", month: "long" })}>
+                      <span>{Number(day.slice(-2))}</span>{hasTimes && <i/>}
+                    </button>;
+                  })}
                 </div>
-                <div className="prayer-status">{prefs[p.name].enabled ? <Bell size={15}/> : <BellRing size={15} className="dim"/>}</div>
-              </div>)}
-              {row.sunrise && <div className="sunrise-row"><Sun size={14}/> Sunrise <span>{formatClock(row.sunrise)}</span></div>}
-              <div className="source-note">Timetable source: {row.source || "Not specified"}</div>
-            </div>}
+                <div className="calendar-legend"><span><i className="legend-dot"/> Mosque timetable available</span><span><i className="legend-today"/> Today</span></div>
+              </div>
+              <div className="selected-date-heading">
+                <div><div className="eyebrow">SELECTED DAY</div><h2>{selectedLabel}</h2></div>
+                <button className="text-btn" onClick={() => setSelectedDate(todayKey)}>Today</button>
+              </div>
+              {selectedRow ? <div className="prayer-list selected-day-list">
+                {toPrayers(selectedRow).map(prayer => <div className="prayer-row" key={prayer.name}>
+                  <div className="prayer-info"><strong>{prayer.name}</strong><span>{prayer.arabic}</span></div>
+                  <div className="prayer-time-wrap"><div className="prayer-time">{formatClock(prayer.time)}</div>{prayer.jamaat && <div className="prayer-jamaat">Jamaat {formatClock(prayer.jamaat)}</div>}</div>
+                </div>)}
+                {selectedRow.sunrise && <div className="sunrise-row"><Sun size={14}/> Sunrise <span>{formatClock(selectedRow.sunrise)}</span></div>}
+                <div className="source-note">{selectedRow.source || "Mosque timetable"}</div>
+              </div> : <div className="empty-card compact-empty"><CalendarDays size={21}/><h3>No timings published for this date</h3><p>Choose a highlighted date to see the mosque's prayer and Jamaat times.</p></div>}
+              {loadingRows && <div className="status-line"><span className="status-dot"/> Updating timetable…</div>}
+            </section>}
 
-            <section className="quick-grid">
-              <button className="quick-card" onClick={() => setTab("timetable")}><CalendarDays/><span>Monthly timetable</span><ChevronRight size={16}/></button>
-              <button className="quick-card" onClick={() => setTab("settings")}><Bell/><span>Prayer reminders</span><ChevronRight size={16}/></button>
-            </section>
-          </>}
+            {tab === "settings" && <section className="page-section settings-page">
+              <div className="eyebrow">PERSONALISE NOOR</div><h1>Settings</h1>
+              <p className="muted">Everything you need to make Noor feel right for you.</p>
 
-          {tab === "timetable" && <section className="page-section">
-            <div className="eyebrow">YOUR SCHEDULE</div><h1>Timetable</h1>
-            <p className="muted">Your mosque timetable is stored in Supabase. Import monthly rows from Settings.</p>
-            {row ? <div className="prayer-list">{prayerList.map(p => <div className="prayer-row" key={p.name}><div className="prayer-info"><strong>{p.name}</strong><span>{p.arabic}</span></div><div className="prayer-time-wrap"><div className="prayer-time">{formatClock(p.time)}</div>{p.jamaat && <div className="prayer-jamaat">Jamaat {formatClock(p.jamaat)}</div>}</div></div>)}</div> : <div className="empty-card"><CalendarDays/><p>No timetable available for today.</p></div>}
-          </section>}
+              <div className="settings-group-label">YOUR PLACE</div>
+              <div className="setting-card">
+                <div className="setting-title"><Building2/><div><strong>Mosque & location</strong><span>Your timetable source and local time</span></div></div>
+                <label className="field-label" htmlFor="settings-mosque">Preferred mosque</label>
+                <select id="settings-mosque" className="field" value={selectedMosqueId} onChange={event => setSelectedMosqueId(event.target.value)}>
+                  <option value="">Choose a mosque</option>{mosques.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+                {mosque && <div className="mosque-address"><MapPin size={15}/><span>{mosque.address || mosque.city}</span></div>}
+                <div className="setting-line"><span>Time zone</span><strong>Europe/London</strong></div>
+                <div className="setting-line"><span>Asr preference</span>
+                  <select className="inline-select" value={asrSchool} onChange={event => setAsrSchool(event.target.value)}>
+                    <option>Hanafi</option><option>Standard</option>
+                  </select>
+                </div>
+              </div>
 
-          {tab === "settings" && <section className="page-section">
-            <div className="eyebrow">PERSONALISE NOOR</div><h1>Settings</h1>
-            <div className="setting-card">
-              <div className="setting-title"><MapPin/><div><strong>Location & calculation</strong><span>Prayer timetable preferences</span></div></div>
-              <div className="setting-line"><span>Location</span><strong>Nottingham, UK</strong></div>
-              <div className="setting-line"><span>Time zone</span><strong>Europe/London</strong></div>
-              <div className="setting-line"><span>Asr school</span><strong>Hanafi</strong></div>
-              <div className="setting-line"><span>Timetable source</span><strong>Local mosque</strong></div>
-              <label className="field-label">Mosque name (for your records)</label>
-              <input className="field" value={mosqueName} onChange={e => setMosqueName(e.target.value)} placeholder="Enter your mosque name"/>
-            </div>
+              <div className="settings-group-label">PRAYER REMINDERS</div>
+              <div className="setting-card">
+                <div className="setting-title"><Bell/><div><strong>Notifications</strong><span>Choose which prayers can notify you</span></div></div>
+                <div className="toggle-line global-toggle"><div><strong>All prayer notifications</strong><span>Master switch for your reminders</span></div>
+                  <input type="checkbox" checked={notificationsEnabled} onChange={event => setNotificationsEnabled(event.target.checked)}/>
+                </div>
+                {prayerNames.map(name => <div className="toggle-line" key={name}>
+                  <div><strong>{name}</strong><span>Prayer-start reminder</span></div>
+                  <input type="checkbox" checked={prefs[name].enabled} disabled={!notificationsEnabled}
+                    onChange={event => setPrefs(old => ({ ...old, [name]: { ...old[name], enabled: event.target.checked } }))}/>
+                </div>)}
+                <div className="status-line"><span className={"status-dot " + (pushState.startsWith("Enabled") ? "green" : "")}/>{pushState}</div>
+                <button className="primary-btn full" onClick={enablePush} disabled={busy || pushState.startsWith("Enabled")}><BellRing size={16}/>{pushState.startsWith("Enabled") ? "This device is enabled" : "Enable on this device"}</button>
+                <button className="secondary-btn full" onClick={testNotification} disabled={busy || !sessionEmail}>Send test notification</button>
+              </div>
 
-            <div className="setting-card">
-              <div className="setting-title"><Bell/><div><strong>Prayer notifications</strong><span>Choose reminders for each prayer</span></div></div>
-              {prayers.map(name => <div className="toggle-line" key={name}>
-                <div><strong>{name}</strong><span>Adhan and simple reminder</span></div>
-                <input type="checkbox" checked={prefs[name].enabled} onChange={e => setPrefs(old => ({ ...old, [name]: { ...old[name], enabled: e.target.checked } }))}/>
-              </div>)}
-              <p className="small-note">Both reminder types are enabled as your default preference. Actual delivery requires the Supabase notification functions to be configured.</p>
-              <button className="primary-btn full" onClick={enablePush} disabled={busy}><BellRing size={16}/>{busy ? "Please wait…" : "Enable notifications on this device"}</button>
-              <div className="status-line"><span className={`status-dot ${pushState === "Enabled" ? "green" : ""}`}></span> Push status: {pushState}</div>
-              <button className="secondary-btn full" onClick={testNotification} disabled={busy || !supabase}>Send test notification</button>
-            </div>
+              <div className="settings-group-label">APP PREFERENCES</div>
+              <div className="setting-card">
+                <div className="setting-title"><Sun/><div><strong>Appearance</strong><span>Choose a comfortable display</span></div></div>
+                <div className="appearance-options">
+                  <button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><Sun size={16}/> Light</button>
+                  <button className={dark ? "selected" : ""} onClick={() => setDark(true)}><Moon size={16}/> Dark</button>
+                </div>
+              </div>
 
-            <div className="setting-card">
-              <div className="setting-title"><Upload/><div><strong>Import mosque timetable</strong><span>CSV file with official daily timings</span></div></div>
-              <p className="small-note">CSV columns required: date, fajr, dhuhr, asr, maghrib, isha. Optional: sunrise, source. Use YYYY-MM-DD dates and 24-hour HH:MM times.</p>
-              <textarea className="csv-area" value={csvText} onChange={e => setCsvText(e.target.value)} placeholder={"date,fajr,sunrise,dhuhr,asr,maghrib,isha,source\n2026-11-24,05:30,07:45,12:05,14:20,16:10,17:45,My mosque"} />
-              <button className="primary-btn full" onClick={importCsv} disabled={busy || !csvText.trim() || !supabase}><Upload size={16}/> Import timetable to Supabase</button>
-              <p className="small-note">The sample row above is illustrative only. Replace it with your mosque's verified times.</p>
-            </div>
+              <div className="settings-group-label">ACCOUNT</div>
+              {signedOutCard}
 
-            <div className="setting-card">
-              <div className="setting-title"><LogIn/><div><strong>Account & connection</strong><span>{sessionEmail || "Sign in to manage your timetable"}</span></div></div>
-              {!hasSupabaseConfig ? <div className="notice warning"><AlertCircle size={16}/> Supabase is not connected. Add your project URL and publishable key to deployment environment variables.</div> :
-                sessionEmail ? <button className="secondary-btn full" onClick={signOut}><LogOut size={16}/> Sign out</button> :
-                <>
-                  <label className="field-label" htmlFor="noor-login-email">Email address</label>
-                  <input
-                    id="noor-login-email"
-                    className="field"
-                    type="email"
-                    autoComplete="email"
-                    inputMode="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    disabled={otpSent || busy}
-                  />
-                  {!otpSent ? (
-                    <button className="primary-btn full" onClick={signIn} disabled={busy || !email.trim()}>
-                      <LogIn size={16}/>{busy ? "Sending code…" : "Send six-digit code"}
-                    </button>
-                  ) : (
-                    <>
-                      <p className="small-note">Enter the eight-digit code sent to <strong>{email}</strong>. Check your junk folder too.</p>
-                      <label className="field-label" htmlFor="noor-login-code">Verification code</label>
-                      <input
-                        id="noor-login-code"
-                        className="field otp-field"
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        autoComplete="one-time-code"
-                        maxLength={8}
-                        value={otp}
-                        onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                        placeholder="00000000"
-                        aria-label="Eight-digit email verification code"
-                        disabled={busy}
-                      />
-                      <button className="primary-btn full" onClick={verifyEmailCode} disabled={busy || otp.length !== 8}>
-                        <ShieldCheck size={16}/>{busy ? "Verifying…" : "Verify code & sign in"}
-                      </button>
-                      <button className="secondary-btn full" onClick={signIn} disabled={busy}>
-                        <RefreshCw size={15}/> Send a new code
-                      </button>
-                      <button className="text-btn full" onClick={() => { setOtpSent(false); setOtp(""); setMessage(""); }} disabled={busy}>
-                        Use a different email
-                      </button>
-                    </>
-                  )}
-                </>}
-            </div>
-          </section>}
+              <div className="settings-group-label">MOSQUE TIMETABLE MANAGEMENT</div>
+              <div className="setting-card import-card">
+                <button className="disclosure-button" onClick={() => setShowImportTools(value => !value)}>
+                  <span><Upload size={18}/><span><strong>Manage timetable data</strong><small>Import an official monthly CSV timetable</small></span></span>
+                  <ChevronRight className={showImportTools ? "rotated" : ""} size={18}/>
+                </button>
+                {showImportTools && <div className="import-tools">
+                  <p className="small-note">CSV columns: date, fajr, sunrise, dhuhr, asr, maghrib, isha, fajr_jamaat, dhuhr_jamaat, asr_jamaat, isha_jamaat, source. Use YYYY-MM-DD dates and 24-hour HH:MM times.</p>
+                  <textarea className="csv-area" value={csvText} onChange={event => setCsvText(event.target.value)}
+                    placeholder={"date,fajr,sunrise,dhuhr,asr,maghrib,isha,fajr_jamaat,dhuhr_jamaat,asr_jamaat,isha_jamaat,source\n2026-12-01,05:50,08:00,11:55,14:00,15:45,17:50,06:45,13:30,14:30,19:00,Official mosque timetable"}/>
+                  <button className="primary-btn full" onClick={importCsv} disabled={busy || !csvText.trim() || !supabase}><Upload size={16}/> Import timetable</button>
+                </div>}
+              </div>
+            </section>}
+          </main>
+        )}
 
-          {message && <div className="toast" role="status"><AlertCircle size={16}/><span>{message}</span><button onClick={() => setMessage("")}><X size={15}/></button></div>}
-        </main>
+        {message && <div className="toast" role="status"><AlertCircle size={16}/><span>{message}</span><button onClick={() => setMessage("")}><X size={15}/></button></div>}
 
-        <nav className="bottom-nav">
+        {!(setupRequired && sessionEmail && prefsLoaded) && <nav className="bottom-nav">
           <button className={tab === "home" ? "selected" : ""} onClick={() => setTab("home")}><Moon/><span>Home</span></button>
           <button className={tab === "timetable" ? "selected" : ""} onClick={() => setTab("timetable")}><CalendarDays/><span>Timetable</span></button>
           <button className={tab === "settings" ? "selected" : ""} onClick={() => setTab("settings")}><Settings/><span>Settings</span></button>
-        </nav>
+        </nav>}
         <footer className="footer-note">Made with intention <span>✦</span> Noor Prayer Companion</footer>
       </div>
     </div>
