@@ -45,6 +45,10 @@ export function parseCsv(text: string): Omit<PrayerRow, "id" | "mosque_id">[] {
       asr: get("asr"),
       maghrib: get("maghrib"),
       isha: get("isha"),
+      fajr_jamaat: get("fajr_jamaat") || null,
+      dhuhr_jamaat: get("dhuhr_jamaat") || null,
+      asr_jamaat: get("asr_jamaat") || null,
+      isha_jamaat: get("isha_jamaat") || null,
       source: get("source") || "User-imported local mosque timetable"
     };
   });
