@@ -33,6 +33,8 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [pushState, setPushState] = useState("Not enabled");
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -53,6 +55,10 @@ export default function App() {
     supabase.auth.getSession().then(({ data }) => setSessionEmail(data.session?.user.email ?? null));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSessionEmail(session?.user.email ?? null);
+      if (session) {
+        setOtpSent(false);
+        setOtp("");
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, []);
@@ -175,11 +181,56 @@ export default function App() {
   }).format(now);
 
   async function signIn() {
-    if (!supabase || !email) return;
+    const client = supabase;
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!client || !normalizedEmail) return;
+
     setBusy(true);
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).toString() } });
-    setMessage(error ? error.message : "Check your email for your secure sign-in link.");
-    setBusy(false);
+    setMessage("");
+    try {
+      const { error } = await client.auth.signInWithOtp({
+        email: normalizedEmail,
+        options: { shouldCreateUser: true },
+      });
+      if (error) throw error;
+      setEmail(normalizedEmail);
+      setOtp("");
+      setOtpSent(true);
+      setMessage(`A six-digit sign-in code has been sent to ${normalizedEmail}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not send your verification code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyEmailCode() {
+    const client = supabase;
+    const normalizedEmail = email.trim().toLowerCase();
+    const token = otp.replace(/\\s/g, "");
+    if (!client || !normalizedEmail) return;
+    if (!/^\\d{6}$/.test(token)) {
+      setMessage("Enter the six-digit code from your email.");
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+    try {
+      const { error } = await client.auth.verifyOtp({
+        email: normalizedEmail,
+        token,
+        type: "email",
+      });
+      if (error) throw error;
+      setOtp("");
+      setOtpSent(false);
+      setMessage("You're signed in to Noor. Welcome back!");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "That code could not be verified. Check it and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function signOut() {
@@ -373,7 +424,53 @@ export default function App() {
               <div className="setting-title"><LogIn/><div><strong>Account & connection</strong><span>{sessionEmail || "Sign in to manage your timetable"}</span></div></div>
               {!hasSupabaseConfig ? <div className="notice warning"><AlertCircle size={16}/> Supabase is not connected. Add your project URL and publishable key to deployment environment variables.</div> :
                 sessionEmail ? <button className="secondary-btn full" onClick={signOut}><LogOut size={16}/> Sign out</button> :
-                <><input className="field" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Your email address"/><button className="primary-btn full" onClick={signIn} disabled={busy || !email}><LogIn size={16}/> Send sign-in link</button></>}
+                <>
+                  <label className="field-label" htmlFor="noor-login-email">Email address</label>
+                  <input
+                    id="noor-login-email"
+                    className="field"
+                    type="email"
+                    autoComplete="email"
+                    inputMode="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    disabled={otpSent || busy}
+                  />
+                  {!otpSent ? (
+                    <button className="primary-btn full" onClick={signIn} disabled={busy || !email.trim()}>
+                      <LogIn size={16}/>{busy ? "Sending code…" : "Send six-digit code"}
+                    </button>
+                  ) : (
+                    <>
+                      <p className="small-note">Enter the six-digit code sent to <strong>{email}</strong>. Check your junk folder too.</p>
+                      <label className="field-label" htmlFor="noor-login-code">Verification code</label>
+                      <input
+                        id="noor-login-code"
+                        className="field otp-field"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={otp}
+                        onChange={e => setOtp(e.target.value.replace(/\\D/g, "").slice(0, 6))}
+                        placeholder="000000"
+                        aria-label="Six-digit email verification code"
+                        disabled={busy}
+                      />
+                      <button className="primary-btn full" onClick={verifyEmailCode} disabled={busy || otp.length !== 6}>
+                        <ShieldCheck size={16}/>{busy ? "Verifying…" : "Verify code & sign in"}
+                      </button>
+                      <button className="secondary-btn full" onClick={signIn} disabled={busy}>
+                        <RefreshCw size={15}/> Send a new code
+                      </button>
+                      <button className="text-btn full" onClick={() => { setOtpSent(false); setOtp(""); setMessage(""); }} disabled={busy}>
+                        Use a different email
+                      </button>
+                    </>
+                  )}
+                </>}
             </div>
           </section>}
 
