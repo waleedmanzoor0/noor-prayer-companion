@@ -85,6 +85,7 @@ create policy "Users delete own prayer times" on public.prayer_times for delete
   to authenticated using (auth.uid() = user_id);
 
 drop policy if exists "Users manage own subscriptions" on public.push_subscriptions;
+drop policy if exists "Users read own subscriptions" on public.push_subscriptions;
 create policy "Users read own subscriptions" on public.push_subscriptions for select
   to authenticated using (auth.uid() = user_id);
 drop policy if exists "Users insert own subscriptions" on public.push_subscriptions;
@@ -98,6 +99,7 @@ create policy "Users delete own subscriptions" on public.push_subscriptions for 
   to authenticated using (auth.uid() = user_id);
 
 drop policy if exists "Users manage own preferences" on public.user_preferences;
+drop policy if exists "Users read own preferences" on public.user_preferences;
 create policy "Users read own preferences" on public.user_preferences for select
   to authenticated using (auth.uid() = user_id);
 create policy "Users insert own preferences" on public.user_preferences for insert
