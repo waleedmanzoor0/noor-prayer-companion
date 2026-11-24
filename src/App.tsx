@@ -26,6 +26,20 @@ type Mosque = {
   city: string;
   timetable_source: string | null;
 };
+type NearbyMosque = {
+  osmKey: string;
+  name: string;
+  address: string | null;
+  city: string;
+  latitude: number;
+  longitude: number;
+  distanceKm: number;
+  website: string | null;
+  phone: string | null;
+  mosqueId: string | null;
+  timetableAvailable: boolean;
+  availableDays: number;
+};
 type Tab = "home" | "timetable" | "settings";
 
 function dateKey(year: number, month: number, day: number) {
@@ -62,6 +76,9 @@ export default function App() {
   const [otpSent, setOtpSent] = useState(false);
   const [mosques, setMosques] = useState<Mosque[]>([]);
   const [selectedMosqueId, setSelectedMosqueId] = useState("");
+  const [nearbyMosques, setNearbyMosques] = useState<NearbyMosque[]>([]);
+  const [nearbyRadius, setNearbyRadius] = useState(6000);
+  const [searchingNearby, setSearchingNearby] = useState(false);
   const [monthRows, setMonthRows] = useState<PrayerRow[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(() => localDateKey());
@@ -175,13 +192,12 @@ export default function App() {
     }
     setLoadingRows(true);
     try {
-      let query = supabase.from("prayer_times").select("*").order("prayer_date", { ascending: true }).limit(1200);
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw userError || new Error("Please sign in again.");
+      let query = supabase.from("prayer_times").select("*")
+        .eq("user_id", user.id)
+        .order("prayer_date", { ascending: true }).limit(1200);
       if (selectedMosqueId) query = query.eq("mosque_id", selectedMosqueId);
-      else {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        query = query.eq("user_id", user.id);
-      }
       const { data, error } = await query;
       if (error) throw error;
       const uniqueDays = new Map<string, PrayerRow>();
@@ -360,6 +376,161 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
+  function getDevicePosition(): Promise<GeolocationPosition> {
+    return new Promise((resolve, reject) => {
+      if (!("geolocation" in navigator)) {
+        reject(new Error("Location services are not available in this browser."));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        resolve,
+        error => {
+          if (error.code === error.PERMISSION_DENIED) reject(new Error("Location permission was denied. You can enable it in your browser or device settings."));
+          else if (error.code === error.POSITION_UNAVAILABLE) reject(new Error("Your location is currently unavailable. Check that Location Services are enabled."));
+          else reject(new Error("Finding your location took too long. Please try again."));
+        },
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 },
+      );
+    });
+  }
+
+  async function findNearbyMosques() {
+    if (!supabase || !sessionEmail) {
+      setMessage("Sign in to Noor before searching for nearby mosques.");
+      return;
+    }
+    setSearchingNearby(true);
+    setMessage("");
+    try {
+      const position = await getDevicePosition();
+      const { data, error } = await supabase.functions.invoke("nearby-mosques", {
+        body: {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          radiusMeters: nearbyRadius,
+        },
+      });
+      if (error) throw error;
+      const results = (data?.mosques || []) as NearbyMosque[];
+      setNearbyMosques(results);
+      if (!results.length) {
+        setMessage("No mapped mosques were found in this radius. Try a wider search.");
+      } else {
+        setMessage("Found " + results.length + " nearby mosque" + (results.length === 1 ? "." : "s."));
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not search for nearby mosques.");
+    } finally {
+      setSearchingNearby(false);
+    }
+  }
+
+  async function saveMosqueChoiceAndCopy(mosqueId: string) {
+    const client = supabase;
+    if (!client || !sessionEmail) throw new Error("Sign in before choosing a mosque.");
+    const { data: { user }, error: userError } = await client.auth.getUser();
+    if (userError || !user) throw userError || new Error("Please sign in again.");
+    const { error: preferenceError } = await client.from("user_preferences").upsert({
+      user_id: user.id,
+      preferred_mosque_id: mosqueId,
+      location: "Near me, UK",
+      timezone: "Europe/London",
+      asr_school: asrSchool,
+      notifications_enabled: notificationsEnabled,
+      prayer_notification_preferences: prefs,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+    if (preferenceError) throw preferenceError;
+
+    const { data: sharedRows, error: rowsError } = await client.from("prayer_times")
+      .select("*").eq("mosque_id", mosqueId).order("prayer_date", { ascending: true });
+    if (rowsError) throw rowsError;
+    if (sharedRows?.length) {
+      const copies = sharedRows.map((item: PrayerRow & { created_at?: string }) => {
+        const { id: _id, created_at: _createdAt, ...rest } = item;
+        return { ...rest, user_id: user.id };
+      });
+      const { error: copyError } = await client.from("prayer_times")
+        .upsert(copies, { onConflict: "user_id,prayer_date" });
+      if (copyError) throw copyError;
+    }
+    setSelectedMosqueId(mosqueId);
+    await loadTimetable();
+    return sharedRows?.length || 0;
+  }
+
+  async function chooseNearbyMosque(item: NearbyMosque) {
+    const client = supabase;
+    if (!client || !sessionEmail) {
+      setMessage("Sign in to Noor before selecting a mosque.");
+      return;
+    }
+    setBusy(true);
+    try {
+      let mosqueId = item.mosqueId;
+      if (!mosqueId) {
+        const { data, error } = await client.functions.invoke("register-mosque", {
+          body: {
+            osmKey: item.osmKey,
+            name: item.name,
+            address: item.address,
+            city: item.city,
+            latitude: item.latitude,
+            longitude: item.longitude,
+          },
+        });
+        if (error) throw error;
+        mosqueId = data?.mosque?.id || null;
+        if (!mosqueId) throw new Error("Noor could not save that mosque. Please try again.");
+      }
+
+      const record: Mosque = {
+        id: mosqueId,
+        name: item.name,
+        address: item.address,
+        city: item.city,
+        timetable_source: item.timetableAvailable ? "Verified mosque timetable" : "No verified timetable has been added yet",
+      };
+      setMosques(previous => previous.some(m => m.id === mosqueId)
+        ? previous.map(m => m.id === mosqueId ? { ...m, ...record } : m)
+        : [...previous, record]);
+      setSelectedMosqueId(mosqueId);
+
+      if (setupRequired) {
+        setMessage(item.timetableAvailable
+          ? item.name + " selected. Its available timetable will be linked when you finish setup."
+          : item.name + " selected. Its prayer timetable is not yet available in Noor.");
+        return;
+      }
+
+      const copiedDays = await saveMosqueChoiceAndCopy(mosqueId);
+      setMessage(copiedDays
+        ? item.name + " selected. " + copiedDays + " timetable day(s) are now available."
+        : item.name + " selected, but Noor does not yet have a verified timetable for it.");
+      setNearbyMosques([]);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not select this mosque.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changePreferredMosque(mosqueId: string) {
+    if (!mosqueId) {
+      setSelectedMosqueId("");
+      return;
+    }
+    setBusy(true);
+    try {
+      const days = await saveMosqueChoiceAndCopy(mosqueId);
+      setMessage(days ? "Your preferred mosque and timetable have been updated." : "Mosque selected. No verified timetable is available yet.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not update your preferred mosque.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function savePreferences() {
     if (!supabase || !sessionEmail) throw new Error("Sign in before saving your preferences.");
     const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -505,6 +676,14 @@ export default function App() {
                   {mosques.map(item => <option key={item.id} value={item.id}>{item.name} · {item.city}</option>)}
                 </select>
                 {mosque && <div className="mosque-choice"><MapPin size={16}/><div><strong>{mosque.name}</strong><span>{mosque.address}</span></div><CheckCircle2 size={18}/></div>}
+                <button className="secondary-btn full" onClick={findNearbyMosques} disabled={searchingNearby || busy}>
+                  <MapPin size={16}/>{searchingNearby ? "Finding nearby mosques…" : "Use my location to find mosques"}
+                </button>
+                <select className="field radius-select" value={nearbyRadius} onChange={event => setNearbyRadius(Number(event.target.value))} aria-label="Nearby search radius">
+                  <option value={3000}>Within 3 km</option><option value={6000}>Within 6 km</option><option value={10000}>Within 10 km</option>
+                </select>
+                <p className="small-note location-privacy">Your location is used for this nearby search only and isn't saved to your Noor profile. Search results are from OpenStreetMap.</p>
+                <NearbyMosqueResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy} onSelect={chooseNearbyMosque}/>
               </>}
               {setupStep === 1 && <>
                 <div className="setup-icon"><Moon size={23}/></div>
@@ -573,7 +752,8 @@ export default function App() {
               {!todayRow ? <div className="empty-card">
                 <div className="empty-icon"><CalendarDays size={23}/></div>
                 <h3>No timetable for today</h3>
-                <p>Noor doesn't estimate times when a verified mosque timetable isn't available. Check the monthly schedule or choose another mosque.</p>
+                <p>{mosque ? "No verified prayer timetable is available for " + mosque.name + " yet. You can choose another nearby mosque or add its official timetable when you receive it." : "Noor doesn't estimate prayer times. Find a nearby mosque with a published timetable to get started."}</p>
+                <button className="secondary-btn" onClick={() => setTab("settings")}><MapPin size={15}/> Find another mosque</button>
                 <button className="primary-btn" onClick={() => setTab("timetable")}>View timetable <ChevronRight size={16}/></button>
               </div> : <div className="prayer-list">
                 {prayerList.map((prayer, index) => <div className={"prayer-row " + (next?.name === prayer.name && next.date === todayKey ? "is-next" : "")} key={prayer.name}>
@@ -643,10 +823,18 @@ export default function App() {
               <div className="setting-card">
                 <div className="setting-title"><Building2/><div><strong>Mosque & location</strong><span>Your timetable source and local time</span></div></div>
                 <label className="field-label" htmlFor="settings-mosque">Preferred mosque</label>
-                <select id="settings-mosque" className="field" value={selectedMosqueId} onChange={event => setSelectedMosqueId(event.target.value)}>
+                <select id="settings-mosque" className="field" value={selectedMosqueId} onChange={event => void changePreferredMosque(event.target.value)} disabled={busy}>
                   <option value="">Choose a mosque</option>{mosques.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
                 {mosque && <div className="mosque-address"><MapPin size={15}/><span>{mosque.address || mosque.city}</span></div>}
+                <button className="secondary-btn full" onClick={findNearbyMosques} disabled={searchingNearby || busy}>
+                  <MapPin size={16}/>{searchingNearby ? "Finding nearby mosques…" : "Find mosques near me"}
+                </button>
+                <select className="field radius-select" value={nearbyRadius} onChange={event => setNearbyRadius(Number(event.target.value))} aria-label="Nearby search radius">
+                  <option value={3000}>Within 3 km</option><option value={6000}>Within 6 km</option><option value={10000}>Within 10 km</option>
+                </select>
+                <p className="small-note location-privacy">Your location is used for the search only. Nearby listings are provided by OpenStreetMap.</p>
+                <NearbyMosqueResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy} onSelect={chooseNearbyMosque}/>
                 <div className="setting-line"><span>Time zone</span><strong>Europe/London</strong></div>
                 <div className="setting-line"><span>Asr preference</span>
                   <select className="inline-select" value={asrSchool} onChange={event => setAsrSchool(event.target.value)}>
@@ -709,6 +897,41 @@ export default function App() {
         </nav>}
         <footer className="footer-note">Made with intention <span>✦</span> Noor Prayer Companion</footer>
       </div>
+    </div>
+  );
+}
+
+function NearbyMosqueResults({ items, selectedId, disabled, onSelect }: {
+  items: NearbyMosque[];
+  selectedId: string;
+  disabled: boolean;
+  onSelect: (item: NearbyMosque) => void;
+}) {
+  if (!items.length) return null;
+  return (
+    <div className="nearby-results">
+      <div className="nearby-results-heading">
+        <strong>Nearby mosques</strong>
+        <span>{items.length} found</span>
+      </div>
+      {items.map(item => (
+        <button className={"nearby-mosque" + (item.mosqueId === selectedId ? " selected" : "")}
+          key={item.osmKey} onClick={() => onSelect(item)} disabled={disabled}>
+          <span className="nearby-mosque-icon"><Building2 size={17}/></span>
+          <span className="nearby-mosque-details">
+            <strong>{item.name}</strong>
+            <small>{item.address || item.city}</small>
+            <small>{item.distanceKm < 1 ? "Less than 1 km" : item.distanceKm.toFixed(1) + " km"} away</small>
+            <span className={"timetable-status " + (item.timetableAvailable ? "available" : "missing")}>
+              {item.timetableAvailable
+                ? "Timetable available · " + item.availableDays + " day(s)"
+                : "No verified timetable yet"}
+            </span>
+          </span>
+          <span className="nearby-pick">{item.mosqueId === selectedId ? <CheckCircle2 size={19}/> : <ChevronRight size={18}/>}</span>
+        </button>
+      ))}
+      <p className="osm-attribution">Map data © OpenStreetMap contributors</p>
     </div>
   );
 }
