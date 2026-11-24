@@ -34,7 +34,10 @@ function getPublishableKey(): string {
 
 function getSecretKey(): string {
   const keys = readKeyDictionary("SUPABASE_SECRET_KEYS");
-  const key = keys.default || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  // Prefer the injected legacy JWT key because supabase-js sends it as a Bearer token.
+  // The current new secret-key API is supported as a fallback; use @supabase/server
+  // before removing the legacy key to avoid sending a non-JWT key as Authorization.
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || keys.default;
   if (!key) throw new Error("Supabase server secret key is unavailable in this function environment.");
   return key;
 }
@@ -86,7 +89,7 @@ Deno.serve(async (req) => {
           title: `It is time for ${name}`,
           body: `It is time for ${name} prayer. May your prayer be accepted.`,
           tag: `noor-${date}-${name.toLowerCase()}`,
-          url: "/"
+          url: "https://waleedmanzoor.co.uk/noor-prayer-companion/"
         });
 
         let hadSuccess = false;
