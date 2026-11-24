@@ -196,7 +196,7 @@ export default function App() {
   }, [sessionEmail, selectedMosqueId, prefsLoaded]);
 
   useEffect(() => {
-    if (!supabase || !sessionEmail || !prefsLoaded || !selectedMosqueId) return;
+    if (!supabase || !sessionEmail || !prefsLoaded || setupRequired || !selectedMosqueId) return;
     let active = true;
     const save = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -215,7 +215,7 @@ export default function App() {
     };
     void save();
     return () => { active = false; };
-  }, [prefs, asrSchool, notificationsEnabled, selectedMosqueId, prefsLoaded, sessionEmail]);
+  }, [prefs, asrSchool, notificationsEnabled, selectedMosqueId, prefsLoaded, setupRequired, sessionEmail]);
 
   useEffect(() => {
     if (!sessionEmail) {
@@ -554,7 +554,7 @@ export default function App() {
                     <TimeUnit value={remaining.seconds} label="SECONDS"/>
                   </div>
                   {next.jamaat && <div className="next-jamaat">Jamaat {formatClock(next.jamaat)}</div>}
-                  {next.date !== todayKey && <div className="next-jamaat">Tomorrow · {formatDateLabel(next.date, { weekday: "long", day: "numeric", month: "short" })}</div>}
+                  {next.date !== todayKey && <div className="next-jamaat">{formatDateLabel(next.date, { weekday: "long", day: "numeric", month: "short" })}</div>}
                 </> : <div className="empty-next"><Clock3 size={24}/><strong>{monthRows.length ? "No upcoming prayer time found" : "Your timetable is waiting"}</strong><span>{monthRows.length ? "Check your next month's timetable or refresh the schedule." : "Choose a mosque with an available timetable to get started."}</span></div>}
                 <div className="hero-footer"><span><ShieldCheck size={14}/> {asrSchool} Asr</span><span>Europe/London</span></div>
               </section>
