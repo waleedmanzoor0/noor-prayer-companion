@@ -85,45 +85,66 @@ Deno.serve(async (req) => {
       return Response.json({ error: "A valid location is required." }, { status: 400, headers: corsHeaders });
     }
 
-    const query = `[out:json][timeout:25];
+    // Ask only for named mosque/worship features; the app only displays named entries.
+    // Keep the query small because public Overpass instances are shared community services.
+    const query = `[out:json][timeout:8];
 (
-  nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="place_of_worship"]["religion"="muslim"];
-  nwr(around:${radiusMeters},${latitude},${longitude})["building"="mosque"];
-  nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="mosque"];
-  nwr(around:${radiusMeters},${latitude},${longitude})["place_of_worship"="mosque"];
+  nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="place_of_worship"]["religion"="muslim"]["name"];
+  nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="mosque"]["name"];
+  nwr(around:${radiusMeters},${latitude},${longitude})["building"="mosque"]["name"];
+  nwr(around:${radiusMeters},${latitude},${longitude})["place_of_worship"="mosque"]["name"];
 );
-out center tags 100;`;
+out center tags 80;`;
 
-    let osmData: any = null;
-    let lastError = "The mosque directory is temporarily unavailable.";
-    for (const endpoint of [
-      "https://overpass-api.de/api/interpreter",
-      "https://overpass.kumi.systems/api/interpreter",
-    ]) {
+    async function requestOverpass(endpoint: string): Promise<any> {
+      const controller = new AbortController();
+      controllers.push(controller);
+      const timeout = setTimeout(() => controller.abort(), 10000);
       try {
         const response = await fetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-            "User-Agent": "NoorPrayerCompanion/1.0 (nearby mosque finder)",
+            "Accept": "application/json",
+            "User-Agent": "NoorPrayerCompanion/1.0",
+            "Referer": "https://waleedmanzoor.co.uk/noor-prayer-companion/",
           },
           body: "data=" + encodeURIComponent(query),
-          signal: AbortSignal.timeout(30000),
+          signal: controller.signal,
         });
         if (!response.ok) {
-          const detail = (await response.text().catch(() => "")).slice(0, 240);
-          lastError = response.status === 429
-            ? "OpenStreetMap is rate-limiting nearby searches. Please try again in a minute."
-            : "OpenStreetMap returned HTTP " + response.status + (detail ? ": " + detail : ".");
-          continue;
+          const detail = (await response.text().catch(() => "")).slice(0, 180);
+          throw new Error("HTTP " + response.status + (detail ? ": " + detail : ""));
         }
-        osmData = await response.json();
-        break;
-      } catch {
-        lastError = "The mosque directory timed out. Please try again.";
+        const data = await response.json();
+        if (data?.remark) throw new Error(String(data.remark).slice(0, 180));
+        if (!Array.isArray(data?.elements)) throw new Error("The map provider returned an unreadable response.");
+        return data;
+      } finally {
+        clearTimeout(timeout);
       }
     }
-    if (!osmData) throw new Error(lastError);
+
+    // These are two independently operated, global OpenStreetMap Overpass instances.
+    // Race them so one slow public endpoint doesn't hold up the user.
+    const controllers: AbortController[] = [];
+    const endpoints = [
+      "https://overpass.private.coffee/api/interpreter",
+      "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    ];
+    let osmData: any;
+    try {
+      osmData = await Promise.any(endpoints.map(requestOverpass));
+    } catch (error) {
+      const failures = error instanceof AggregateError ? error.errors : [error];
+      console.error("[nearby-mosques] all map providers failed:", failures.map((item: unknown) =>
+        item instanceof Error ? item.message : String(item)
+      ));
+      throw new Error("The OpenStreetMap directory is temporarily busy. Please try again shortly.");
+    } finally {
+      // Cancel the slower request once a usable answer has arrived.
+      for (const controller of controllers) controller.abort();
+    }
 
     const url = Deno.env.get("SUPABASE_URL")!;
     const admin = createClient(url, getSecretKey());
