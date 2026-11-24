@@ -99,9 +99,11 @@ Deno.serve(async (req) => {
       const { data: candidates, error: candidatesError } = await admin.from("mosques")
         .select("id,name,address,city,timetable_source,latitude,longitude,osm_key").limit(1000);
       if (candidatesError) throw candidatesError;
-      const matched = (candidates || []).find((item: any) =>
+      const matchingCandidates = (candidates || []).filter((item: any) =>
         !item.osm_key && nameCore && coreName(item.name || "") === nameCore
       );
+      // Reuse an existing Noor timetable only when the exact normalized name is unique.
+      const matched = matchingCandidates.length === 1 ? matchingCandidates[0] : null;
       if (matched) {
         const { data, error } = await admin.from("mosques").update({
           latitude, longitude, osm_key: osmKey, osm_source: "© OpenStreetMap contributors",
