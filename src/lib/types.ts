@@ -13,19 +13,22 @@ export type PrayerRow = {
   dhuhr_jamaat?: string | null;
   asr_jamaat?: string | null;
   isha_jamaat?: string | null;
+  maghrib_jamaat?: string | null;
+  calculated_begins?: string[] | null;
   source: string | null;
 };
 
-export type Prayer = { name: PrayerName; time: string; jamaat: string | null; arabic: string };
+export type Prayer = { name: PrayerName; time: string; jamaat: string | null; arabic: string; calculated: boolean };
 export const PRAYER_KEYS: {
   name: PrayerName;
   key: keyof PrayerRow;
   jamaatKey: keyof PrayerRow | null;
+  calculatedKey: string;
   arabic: string;
 }[] = [
-  { name: "Fajr", key: "fajr", jamaatKey: "fajr_jamaat", arabic: "الفجر" },
-  { name: "Dhuhr", key: "dhuhr", jamaatKey: "dhuhr_jamaat", arabic: "الظهر" },
-  { name: "Asr", key: "asr", jamaatKey: "asr_jamaat", arabic: "العصر" },
-  { name: "Maghrib", key: "maghrib", jamaatKey: null, arabic: "المغرب" },
-  { name: "Isha", key: "isha", jamaatKey: "isha_jamaat", arabic: "العشاء" },
+  { name: "Fajr", key: "fajr", jamaatKey: "fajr_jamaat", calculatedKey: "fajr", arabic: "الفجر" },
+  { name: "Dhuhr", key: "dhuhr", jamaatKey: "dhuhr_jamaat", calculatedKey: "zuhr", arabic: "الظهر" },
+  { name: "Asr", key: "asr", jamaatKey: "asr_jamaat", calculatedKey: "asr", arabic: "العصر" },
+  { name: "Maghrib", key: "maghrib", jamaatKey: "maghrib_jamaat", calculatedKey: "maghrib", arabic: "المغرب" },
+  { name: "Isha", key: "isha", jamaatKey: "isha_jamaat", calculatedKey: "isha", arabic: "العشاء" },
 ];
