@@ -64,19 +64,28 @@ date,fajr,sunrise,dhuhr,asr,maghrib,isha,fajr_jamaat,dhuhr_jamaat,asr_jamaat,ish
 ```
 
 Use YYYY-MM-DD dates and 24-hour HH:MM values. Jamaat columns are optional; do not enter estimated values.
-## Nearby mosque discovery
+## Waqt UK mosque timetables
 
-The signed-in app requests the user's location only after tapping Find mosques near me. The browser queries OpenStreetMap's Overpass API directly using standard form-encoded cross-origin requests and races several public providers. It sends the resulting public map features to the authenticated nearby-mosques Edge Function, which validates them, calculates distances, matches Noor's mosque directory and checks timetable availability. Results are sorted by distance within a user-selected 3, 6 or 10 km radius.
+Noor can connect to Waqt UK without an API key. Users open Waqt's directory, choose a mosque, then paste that mosque's Waqt page URL or slug into Settings (or the first-time setup flow).
 
-The app does not save the device coordinates in the Noor profile. The coordinates are used in the search request and are forwarded to OpenStreetMap's public map-data service. OpenStreetMap attribution is displayed with the results.
+- Waqt publishes a JSON file for one mosque at `https://waqt.uk/api/v1/<slug>.json`.
+- The file contains today's and tomorrow's times, the mosque page URL, a revision, London timezone, prayer starts, and optional Jamaat times.
+- Waqt does not provide a downloadable API for every mosque. Noor therefore uses Waqt's own nearby finder/directory for discovery and requires the user to choose the specific mosque page.
+- The secured `waqt-timetable` Edge Function fetches the feed and caches it per mosque. A private `waqt_feed_cache` table enforces no more than one request per mosque per hour across Noor users.
+- Noor converts Waqt's prayer-specific clock notation into UK 24-hour times, preserves separate Jamaat fields, and marks entries listed in `calculatedBegins` as **Calculated start**.
+- Waqt's special Maghrib/iftar convention is applied when there is no `jMaghrib`.
+- Noor displays **Times from Waqt** with a link to Waqt wherever Waqt times appear.
+- Waqt supplies today and tomorrow only; it is not a monthly timetable API. The calendar shows only dates available in Noor's database. Existing manually imported Fazilat Masjid rows remain intact unless a Waqt page for that mosque is explicitly connected.
 
-A nearby map listing is **not** treated as a verified prayer timetable. Noor checks whether a selected mosque has actual timetable rows in the database. If it does, the rows are linked/copied to the signed-in user's account. If it does not, Noor clearly indicates that a verified timetable is not yet available; it does not calculate or invent times from map data.
+Useful links:
+- Waqt UK: https://waqt.uk/
+- Nottingham directory: https://waqt.uk/nottingham/
+- Developer documentation: https://waqt.uk/developers/
 
-The functions are:
-- `nearby-mosques` — authenticated, read-only search over OpenStreetMap plus timetable-availability matching.
-- `register-mosque` — authenticated registration of a selected public mosque listing in Noor's directory.
+Related migrations:
+- `0011_add_waqt_masjid_integration.sql`
+- `0012_create_waqt_feed_cache.sql`
 
-Related migration: `0010_add_openstreetmap_mosque_metadata.sql`.
 
 ## Edge Functions and push delivery
 
