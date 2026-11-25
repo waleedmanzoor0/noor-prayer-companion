@@ -1119,6 +1119,12 @@ export default function App() {
               <div className="settings-group-label">YOUR PLACE</div>
               <div className="setting-card">
                 <div className="setting-title"><Building2/><div><strong>Mosque & location</strong><span>Your timetable source and local time</span></div></div>
+                <label className="field-label" htmlFor="settings-saved-mosque">Currently selected mosque</label>
+                <select id="settings-saved-mosque" className="field" value={selectedMosqueId}
+                  onChange={event => void changePreferredMosque(event.target.value)} disabled={busy}>
+                  <option value="">Choose a saved mosque</option>
+                  {mosques.map(item => <option key={item.id} value={item.id}>{item.name} · {item.city}</option>)}
+                </select>
                 <label className="field-label" htmlFor="settings-postcode">Your UK postcode</label>
                 <div className="postcode-search-row">
                   <input id="settings-postcode" className="field" value={postcode}
