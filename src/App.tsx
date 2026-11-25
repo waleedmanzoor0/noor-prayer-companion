@@ -206,19 +206,6 @@ export default function App() {
     if (sessionEmail && prefsLoaded) void loadTimetable();
   }, [sessionEmail, selectedMosqueId, prefsLoaded]);
 
-  // Refresh a selected Waqt mosque once when Noor opens on a new UK day.
-  // The server-side shared cache still enforces Waqt's hourly request limit.
-  useEffect(() => {
-    if (!sessionEmail || !prefsLoaded || setupRequired || !selectedMosqueId) return;
-    const selected = mosques.find(item => item.id === selectedMosqueId);
-    if (!selected?.waqt_slug) return;
-    const refreshKey = selected.id + ":" + todayKey;
-    if (autoWaqtRefreshAttempt.current === refreshKey) return;
-    autoWaqtRefreshAttempt.current = refreshKey;
-    setWaqtSlug(selected.waqt_slug);
-    void connectWaqtMosque(selected.waqt_slug, true);
-  }, [sessionEmail, prefsLoaded, setupRequired, selectedMosqueId, mosques, todayKey]);
-
   useEffect(() => {
     const client = supabase;
     if (!client || !sessionEmail || !prefsLoaded || setupRequired || !selectedMosqueId) return;
@@ -288,6 +275,19 @@ export default function App() {
   const monthRowsOnly = monthRows.filter(item => item.prayer_date.startsWith(dateKey(monthCursor.getFullYear(), monthCursor.getMonth(), 1).slice(0, 7)));
   const calendarCells = getCalendarCells(monthCursor);
   const selectedLabel = formatDateLabel(selectedDate, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+  // Refresh a selected Waqt mosque once when Noor opens on a new UK day.
+  // The server-side shared cache still enforces Waqt's hourly request limit.
+  useEffect(() => {
+    if (!sessionEmail || !prefsLoaded || setupRequired || !selectedMosqueId) return;
+    const selected = mosques.find(item => item.id === selectedMosqueId);
+    if (!selected?.waqt_slug) return;
+    const refreshKey = selected.id + ":" + todayKey;
+    if (autoWaqtRefreshAttempt.current === refreshKey) return;
+    autoWaqtRefreshAttempt.current = refreshKey;
+    setWaqtSlug(selected.waqt_slug);
+    void connectWaqtMosque(selected.waqt_slug, true);
+  }, [sessionEmail, prefsLoaded, setupRequired, selectedMosqueId, mosques, todayKey]);
 
   async function signIn() {
     const client = supabase;
@@ -416,9 +416,6 @@ export default function App() {
       const mosqueData = data?.mosque as Mosque | undefined;
       if (!payload || !mosqueData?.id) {
         throw new Error("Waqt did not return a complete mosque record.");
-      }
-      if (data?.currentForUkDate === false) {
-        throw new Error("Waqt is still serving its previous cached day. To respect its hourly limit, please try again later.");
       }
       if (!payload.today && !payload.tomorrow) {
         throw new Error("Waqt has not published prayer times for today or tomorrow yet.");
