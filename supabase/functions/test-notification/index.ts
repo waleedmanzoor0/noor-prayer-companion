@@ -46,6 +46,15 @@ Deno.serve(async (req) => {
     if (!user) throw new Error("Sign in first.");
 
     const admin = createClient(url, service);
+    const { data: preference, error: preferenceError } = await admin.from("user_preferences")
+      .select("notifications_enabled")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (preferenceError) throw preferenceError;
+    if (preference?.notifications_enabled === false) {
+      throw new Error("Prayer notifications are paused in Noor Settings. Turn them back on before sending a test.");
+    }
+
     const { data: subs, error } = await admin.from("push_subscriptions").select("subscription").eq("user_id", user.id);
     if (error) throw error;
     if (!subs?.length) throw new Error("No registered device found. Enable notifications on your iPhone first.");
