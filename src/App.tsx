@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertCircle, Bell, BellRing, Building2, CalendarDays, CalendarClock,
-  CheckCircle2, ChevronLeft, ChevronRight, Clock3, LogIn, LogOut,
+  AlertCircle, Bell, BellRing, Building2, CalendarDays,
+  CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, LogIn, LogOut,
   MapPin, Moon, RefreshCw, Settings, ShieldCheck, Smartphone, Sun, Upload, X
 } from "lucide-react";
 import { supabase, hasSupabaseConfig } from "./lib/supabase";
 import { countdown, formatClock, hijriDate, localDateKey, prayerDateTime } from "./lib/date";
 import { parseCsv, toPrayers } from "./lib/prayers";
 import type { PrayerRow, PrayerName } from "./lib/types";
+import { waqtDayToPrayerRow, type WaqtPayload } from "./lib/waqt";
 import "./styles.css";
 
 const prayerNames: PrayerName[] = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
@@ -25,20 +26,8 @@ type Mosque = {
   address: string | null;
   city: string;
   timetable_source: string | null;
-};
-type NearbyMosque = {
-  osmKey: string;
-  name: string;
-  address: string | null;
-  city: string;
-  latitude: number;
-  longitude: number;
-  distanceKm: number;
-  website: string | null;
-  phone: string | null;
-  mosqueId: string | null;
-  timetableAvailable: boolean;
-  availableDays: number;
+  waqt_slug?: string | null;
+  waqt_url?: string | null;
 };
 type Tab = "home" | "timetable" | "settings";
 
@@ -63,75 +52,6 @@ function getCalendarCells(value: Date) {
   ];
 }
 
-type OsmElement = {
-  type: "node" | "way" | "relation";
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-};
-
-async function fetchNearbyOsmElements(latitude: number, longitude: number, radiusMeters: number): Promise<OsmElement[]> {
-  const query = `[out:json][timeout:12];
-(
-  nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="place_of_worship"]["religion"="muslim"]["name"];
-  nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="mosque"]["name"];
-  nwr(around:${radiusMeters},${latitude},${longitude})["building"="mosque"]["name"];
-  nwr(around:${radiusMeters},${latitude},${longitude})["place_of_worship"="mosque"]["name"];
-);
-out center tags 80;`;
-
-  const endpoints = [
-    "https://overpass.private.coffee/api/interpreter",
-    "https://overpass-api.de/api/interpreter",
-    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-  ];
-  const controllers: AbortController[] = [];
-
-  const request = async (endpoint: string): Promise<OsmElement[]> => {
-    const controller = new AbortController();
-    controllers.push(controller);
-    const timeout = window.setTimeout(() => controller.abort(), 12000);
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-        body: new URLSearchParams({ data: query }).toString(),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        throw new Error("Map provider returned HTTP " + response.status + ".");
-      }
-      const payload = await response.json() as { elements?: unknown[]; remark?: string };
-      if (payload.remark) throw new Error(payload.remark);
-      if (!Array.isArray(payload.elements)) throw new Error("The map provider returned an invalid response.");
-      return payload.elements as OsmElement[];
-    } finally {
-      window.clearTimeout(timeout);
-    }
-  };
-
-  try {
-    const attempts = endpoints.map(request);
-    const firstSuccessful = new Promise<OsmElement[]>((resolve, reject) => {
-      let pending = attempts.length;
-      for (const attempt of attempts) {
-        attempt.then(resolve).catch(() => {
-          pending -= 1;
-          if (pending === 0) {
-            reject(new Error("Nearby mosque maps are temporarily unavailable. Please try again shortly."));
-          }
-        });
-      }
-    });
-    return await firstSuccessful;
-  } finally {
-    controllers.forEach(controller => controller.abort());
-  }
-}
-
-
 export default function App() {
   const [now, setNow] = useState(new Date());
   const [tab, setTab] = useState<Tab>("home");
@@ -145,10 +65,8 @@ export default function App() {
   const [otpSent, setOtpSent] = useState(false);
   const [mosques, setMosques] = useState<Mosque[]>([]);
   const [selectedMosqueId, setSelectedMosqueId] = useState("");
-  const [nearbyMosques, setNearbyMosques] = useState<NearbyMosque[]>([]);
-  const [nearbyRadius, setNearbyRadius] = useState(6000);
-  const [searchingNearby, setSearchingNearby] = useState(false);
-  const [nearbyStatus, setNearbyStatus] = useState("");
+  const [waqtSlug, setWaqtSlug] = useState("");
+  const [connectingWaqt, setConnectingWaqt] = useState(false);
   const [monthRows, setMonthRows] = useState<PrayerRow[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(() => localDateKey());
@@ -212,7 +130,7 @@ export default function App() {
       setBusy(true);
       try {
         const [{ data: mosqueData, error: mosqueError }, { data: { user }, error: userError }] = await Promise.all([
-          client.from("mosques").select("id,name,address,city,timetable_source").order("name"),
+          client.from("mosques").select("id,name,address,city,timetable_source,waqt_slug,waqt_url").order("name"),
           client.auth.getUser(),
         ]);
         if (mosqueError) throw mosqueError;
@@ -446,55 +364,24 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
-  function getDevicePosition(): Promise<GeolocationPosition> {
-    return new Promise((resolve, reject) => {
-      if (!window.isSecureContext) {
-        reject(new Error("Location access requires a secure HTTPS connection. Open Noor using its https:// address."));
-        return;
-      }
-      if (!("geolocation" in navigator)) {
-        reject(new Error("This browser does not provide location services. Try opening Noor in Safari."));
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        resolve,
-        error => {
-          if (error.code === 1) reject(new Error("Location permission was denied. You can enable it in your browser or device settings."));
-          else if (error.code === 2) reject(new Error("Your location is currently unavailable. Check that Location Services are enabled."));
-          else reject(new Error("Finding your location took too long. Please try again."));
-        },
-        { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 },
-      );
-    });
-  }
-
-  async function findNearbyMosques() {
-    if (!supabase || !sessionEmail) {
-      const text = "Sign in to Noor before searching for nearby mosques.";
-      setNearbyStatus(text);
-      setMessage(text);
+  async function connectWaqtMosque() {
+    const client = supabase;
+    const supplied = waqtSlug.trim();
+    if (!client || !sessionEmail) {
+      setMessage("Sign in to Noor before connecting a Waqt mosque.");
       return;
     }
-    setSearchingNearby(true);
-    setNearbyMosques([]);
-    setNearbyStatus("Waiting for your device to share its location. Approve the location request if prompted.");
+    if (!supplied) {
+      setMessage("Enter a Waqt mosque page address or slug first.");
+      return;
+    }
+
+    setConnectingWaqt(true);
+    setBusy(true);
     setMessage("");
     try {
-      const position = await getDevicePosition();
-      setNearbyStatus("Location received. Searching map providers for mosques within " + (nearbyRadius / 1000) + " km…");
-      const elements = await fetchNearbyOsmElements(
-        position.coords.latitude,
-        position.coords.longitude,
-        nearbyRadius,
-      );
-      setNearbyStatus("Found map data. Checking which mosques have verified prayer timetables…");
-      const { data, error } = await supabase.functions.invoke("nearby-mosques", {
-        body: {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          radiusMeters: nearbyRadius,
-          elements: elements.slice(0, 100),
-        },
+      const { data, error } = await client.functions.invoke("waqt-timetable", {
+        body: { slug: supplied },
       });
       if (error) {
         if ("context" in error && error.context instanceof Response) {
@@ -504,23 +391,62 @@ export default function App() {
         throw error;
       }
       if (data?.error) throw new Error(String(data.error));
-      const results = (data?.mosques || []) as NearbyMosque[];
-      setNearbyMosques(results);
-      if (!results.length) {
-        const text = "No named mosques were found within " + (nearbyRadius / 1000) + " km. Try a wider radius.";
-        setNearbyStatus(text);
-        setMessage(text);
-      } else {
-        const text = "Found " + results.length + " nearby mosque" + (results.length === 1 ? "." : "s.") + " Select one below.";
-        setNearbyStatus(text);
-        setMessage("");
+
+      const payload = data?.payload as WaqtPayload | undefined;
+      const mosqueData = data?.mosque as Mosque | undefined;
+      if (!payload || !mosqueData?.id || !payload.today) {
+        throw new Error("Waqt did not return a complete mosque timetable.");
       }
+
+      const { data: { user }, error: userError } = await client.auth.getUser();
+      if (userError || !user) throw userError || new Error("Please sign in again.");
+
+      const sourceRows = [payload.today, payload.tomorrow]
+        .map(day => waqtDayToPrayerRow(day))
+        .filter((row): row is NonNullable<typeof row> => Boolean(row));
+      if (!sourceRows.length) {
+        throw new Error("Waqt has not published complete prayer start times for today or tomorrow.");
+      }
+
+      const rows = sourceRows.map(row => ({
+        ...row,
+        user_id: user.id,
+        mosque_id: mosqueData.id,
+      }));
+      const { error: importError } = await client.from("prayer_times")
+        .upsert(rows, { onConflict: "user_id,prayer_date" });
+      if (importError) throw importError;
+
+      const { error: preferenceError } = await client.from("user_preferences").upsert({
+        user_id: user.id,
+        preferred_mosque_id: mosqueData.id,
+        location: mosqueData.city || "United Kingdom",
+        timezone: "Europe/London",
+        asr_school: asrSchool,
+        notifications_enabled: notificationsEnabled,
+        prayer_notification_preferences: prefs,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id" });
+      if (preferenceError) throw preferenceError;
+
+      setMosques(previous => previous.some(item => item.id === mosqueData.id)
+        ? previous.map(item => item.id === mosqueData.id ? { ...item, ...mosqueData } : item)
+        : [...previous, mosqueData]);
+      setSelectedMosqueId(mosqueData.id);
+      setWaqtSlug(payload.masjid.slug);
+      setMonthRows(previous => {
+        const byDate = new Map(previous.map(item => [item.prayer_date, item]));
+        rows.forEach(row => byDate.set(row.prayer_date, row as PrayerRow));
+        return [...byDate.values()].sort((a, b) => a.prayer_date.localeCompare(b.prayer_date));
+      });
+
+      const importedDates = sourceRows.map(row => row.prayer_date).join(" and ");
+      setMessage("Connected to " + payload.masjid.name + ". Waqt times imported for " + importedDates + ".");
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Could not search for nearby mosques.";
-      setNearbyStatus(text);
-      setMessage(text);
+      setMessage(error instanceof Error ? error.message : "Could not connect this Waqt mosque.");
     } finally {
-      setSearchingNearby(false);
+      setConnectingWaqt(false);
+      setBusy(false);
     }
   }
 
@@ -558,66 +484,6 @@ export default function App() {
     return sharedRows?.length || 0;
   }
 
-  async function chooseNearbyMosque(item: NearbyMosque) {
-    const client = supabase;
-    if (!client || !sessionEmail) {
-      setMessage("Sign in to Noor before selecting a mosque.");
-      return;
-    }
-    setBusy(true);
-    try {
-      let mosqueId = item.mosqueId;
-      let timetableAvailable = item.timetableAvailable;
-      let availableDays = item.availableDays;
-      if (!mosqueId) {
-        const { data, error } = await client.functions.invoke("register-mosque", {
-          body: {
-            osmKey: item.osmKey,
-            name: item.name,
-            address: item.address,
-            city: item.city,
-            latitude: item.latitude,
-            longitude: item.longitude,
-          },
-        });
-        if (error) throw error;
-        mosqueId = data?.mosque?.id || null;
-        timetableAvailable = Boolean(data?.timetableAvailable);
-        availableDays = Number(data?.availableDays || 0);
-        if (!mosqueId) throw new Error("Noor could not save that mosque. Please try again.");
-      }
-
-      const record: Mosque = {
-        id: mosqueId,
-        name: item.name,
-        address: item.address,
-        city: item.city,
-        timetable_source: timetableAvailable ? "Verified mosque timetable" : "No verified timetable has been added yet",
-      };
-      setMosques(previous => previous.some(m => m.id === mosqueId)
-        ? previous.map(m => m.id === mosqueId ? { ...m, ...record } : m)
-        : [...previous, record]);
-      setSelectedMosqueId(mosqueId);
-
-      if (setupRequired) {
-        setMessage(timetableAvailable
-          ? item.name + " selected. " + availableDays + " timetable day(s) will be linked when you finish setup."
-          : item.name + " selected. Its prayer timetable is not yet available in Noor.");
-        return;
-      }
-
-      const copiedDays = await saveMosqueChoiceAndCopy(mosqueId);
-      setMessage(copiedDays
-        ? item.name + " selected. " + copiedDays + " timetable day(s) are now available."
-        : item.name + " selected, but Noor does not yet have a verified timetable for it.");
-      setNearbyMosques([]);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not select this mosque.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function changePreferredMosque(mosqueId: string) {
     if (!mosqueId) {
       setSelectedMosqueId("");
@@ -625,8 +491,33 @@ export default function App() {
     }
     setBusy(true);
     try {
-      const days = await saveMosqueChoiceAndCopy(mosqueId);
-      setMessage(days ? "Your preferred mosque and timetable have been updated." : "Mosque selected. No verified timetable is available yet.");
+      const chosen = mosques.find(item => item.id === mosqueId);
+      if (chosen?.waqt_slug) {
+        setWaqtSlug(chosen.waqt_slug);
+        const { data, error } = await supabase!.functions.invoke("waqt-timetable", { body: { slug: chosen.waqt_slug } });
+        if (error) throw error;
+        if (data?.error) throw new Error(String(data.error));
+        const payload = data?.payload as WaqtPayload;
+        const { data: { user } } = await supabase!.auth.getUser();
+        if (!user) throw new Error("Please sign in again.");
+        const rows = [payload.today, payload.tomorrow].map(waqtDayToPrayerRow)
+          .filter((row): row is NonNullable<typeof row> => Boolean(row))
+          .map(row => ({ ...row, user_id: user.id, mosque_id: mosqueId }));
+        if (rows.length) {
+          const { error: upsertError } = await supabase!.from("prayer_times").upsert(rows, { onConflict: "user_id,prayer_date" });
+          if (upsertError) throw upsertError;
+        }
+        setSelectedMosqueId(mosqueId);
+        setMonthRows(previous => {
+          const byDate = new Map(previous.map(item => [item.prayer_date, item]));
+          rows.forEach(row => byDate.set(row.prayer_date, row as PrayerRow));
+          return [...byDate.values()].sort((a, b) => a.prayer_date.localeCompare(b.prayer_date));
+        });
+        setMessage("Your Waqt mosque timetable has been refreshed.");
+      } else {
+        const days = await saveMosqueChoiceAndCopy(mosqueId);
+        setMessage(days ? "Your preferred mosque and timetable have been updated." : "Mosque selected. No verified timetable is available yet.");
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not update your preferred mosque.");
     } finally {
@@ -779,17 +670,23 @@ export default function App() {
                   {mosques.map(item => <option key={item.id} value={item.id}>{item.name} · {item.city}</option>)}
                 </select>
                 {mosque && <div className="mosque-choice"><MapPin size={16}/><div><strong>{mosque.name}</strong><span>{mosque.address}</span></div><CheckCircle2 size={18}/></div>}
-                <button type="button" className="secondary-btn full" onClick={findNearbyMosques} disabled={searchingNearby || busy}>
-                  <MapPin size={16}/>{searchingNearby ? "Finding nearby mosques…" : "Use my location to find mosques"}
-                </button>
-                {nearbyStatus && <div className={"nearby-feedback" + (searchingNearby ? " pending" : nearbyMosques.length ? " success" : " error")} role="status" aria-live="polite">
-                  {searchingNearby && <span className="nearby-spinner"/>}<span>{nearbyStatus}</span>
-                </div>}
-                <select className="field radius-select" value={nearbyRadius} onChange={event => setNearbyRadius(Number(event.target.value))} aria-label="Nearby search radius">
-                  <option value={3000}>Within 3 km</option><option value={6000}>Within 6 km</option><option value={10000}>Within 10 km</option>
-                </select>
-                <p className="small-note location-privacy">Your location is used for this nearby search only and isn't saved to your Noor profile. Search results are from OpenStreetMap.</p>
-                <NearbyMosqueResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy} onSelect={chooseNearbyMosque}/>
+                <div className="waqt-connect-box">
+                  <div className="waqt-connect-heading"><CalendarDays size={17}/><strong>Use a Waqt UK mosque timetable</strong></div>
+                  <a className="secondary-btn full external-link" href="https://waqt.uk/" target="_blank" rel="noreferrer">
+                    <MapPin size={15}/> Find your nearest mosque on Waqt UK <ExternalLink size={13}/>
+                  </a>
+                  <a className="waqt-directory-link" href="https://waqt.uk/nottingham/" target="_blank" rel="noreferrer">
+                    Browse Nottingham mosque directory <ExternalLink size={11}/>
+                  </a>
+                  <label className="field-label" htmlFor="setup-waqt-slug">Waqt mosque page or slug</label>
+                  <input id="setup-waqt-slug" className="field" value={waqtSlug} onChange={event => setWaqtSlug(event.target.value)}
+                    placeholder="https://waqt.uk/shahjalal/ or shahjalal" autoCapitalize="none" autoCorrect="off"/>
+                  <p className="small-note">Open Waqt, choose your mosque, then paste its page address here. Noor fetches today's and tomorrow's published times.</p>
+                  <button className="primary-btn full" onClick={connectWaqtMosque} disabled={connectingWaqt || busy || !waqtSlug.trim()}>
+                    <RefreshCw size={15}/>{connectingWaqt ? "Connecting to Waqt…" : "Connect Waqt timetable"}
+                  </button>
+                  <p className="waqt-attribution-note">Times from Waqt · cached at most once an hour.</p>
+                </div>
               </>}
               {setupStep === 1 && <>
                 <div className="setup-icon"><Moon size={23}/></div>
@@ -844,6 +741,7 @@ export default function App() {
                     <TimeUnit value={remaining.minutes} label="MINUTES"/>
                     <TimeUnit value={remaining.seconds} label="SECONDS"/>
                   </div>
+                  {next.calculated && <div className="next-jamaat">Start time calculated by Waqt</div>}
                   {next.jamaat && <div className="next-jamaat">Jamaat {formatClock(next.jamaat)}</div>}
                   {next.date !== todayKey && <div className="next-jamaat">{formatDateLabel(next.date, { weekday: "long", day: "numeric", month: "short" })}</div>}
                 </> : <div className="empty-next"><Clock3 size={24}/><strong>{monthRows.length ? "No upcoming prayer time found" : "Your timetable is waiting"}</strong><span>{monthRows.length ? "Check your next month's timetable or refresh the schedule." : "Choose a mosque with an available timetable to get started."}</span></div>}
@@ -867,12 +765,15 @@ export default function App() {
                   <div className="prayer-info"><strong>{prayer.name}</strong><span>{prayer.arabic}</span></div>
                   <div className="prayer-time-wrap">
                     <div className="prayer-time">{formatClock(prayer.time)}</div>
+                    {prayer.calculated && <div className="prayer-calculated">Calculated start</div>}
                     {prayer.jamaat && <div className="prayer-jamaat">Jamaat {formatClock(prayer.jamaat)}</div>}
                   </div>
                   <div className="prayer-status">{prefs[prayer.name].enabled ? <Bell size={15}/> : <Bell size={15} className="dim"/>}</div>
                 </div>)}
                 {todayRow.sunrise && <div className="sunrise-row"><Sun size={14}/> Sunrise <span>{formatClock(todayRow.sunrise)}</span></div>}
-                <div className="source-note">{mosque?.name || "Local mosque"} · {todayRow.source || "Mosque timetable"}</div>
+                <div className="source-note">{mosque?.name || "Local mosque"} · {todayRow.source || "Mosque timetable"}
+                  {mosque?.waqt_slug && <> · <a className="waqt-inline-link" href="https://waqt.uk/" target="_blank" rel="noreferrer">Times from Waqt</a></>}
+                </div>
               </div>}
 
               <section className="home-shortcuts">
@@ -913,10 +814,12 @@ export default function App() {
               {selectedRow ? <div className="prayer-list selected-day-list">
                 {toPrayers(selectedRow).map(prayer => <div className="prayer-row" key={prayer.name}>
                   <div className="prayer-info"><strong>{prayer.name}</strong><span>{prayer.arabic}</span></div>
-                  <div className="prayer-time-wrap"><div className="prayer-time">{formatClock(prayer.time)}</div>{prayer.jamaat && <div className="prayer-jamaat">Jamaat {formatClock(prayer.jamaat)}</div>}</div>
+                  <div className="prayer-time-wrap"><div className="prayer-time">{formatClock(prayer.time)}</div>{prayer.calculated && <div className="prayer-calculated">Calculated start</div>}{prayer.jamaat && <div className="prayer-jamaat">Jamaat {formatClock(prayer.jamaat)}</div>}</div>
                 </div>)}
                 {selectedRow.sunrise && <div className="sunrise-row"><Sun size={14}/> Sunrise <span>{formatClock(selectedRow.sunrise)}</span></div>}
-                <div className="source-note">{selectedRow.source || "Mosque timetable"}</div>
+                <div className="source-note">{selectedRow.source || "Mosque timetable"}
+                  {mosque?.waqt_slug && <> · <a className="waqt-inline-link" href="https://waqt.uk/" target="_blank" rel="noreferrer">Times from Waqt</a></>}
+                </div>
               </div> : <div className="empty-card compact-empty"><CalendarDays size={21}/><h3>No timings published for this date</h3><p>Choose a highlighted date to see the mosque's prayer and Jamaat times.</p></div>}
               {loadingRows && <div className="status-line"><span className="status-dot"/> Updating timetable…</div>}
             </section>}
@@ -933,17 +836,27 @@ export default function App() {
                   <option value="">Choose a mosque</option>{mosques.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
                 {mosque && <div className="mosque-address"><MapPin size={15}/><span>{mosque.address || mosque.city}</span></div>}
-                <button type="button" className="secondary-btn full" onClick={findNearbyMosques} disabled={searchingNearby || busy}>
-                  <MapPin size={16}/>{searchingNearby ? "Finding nearby mosques…" : "Find mosques near me"}
-                </button>
-                {nearbyStatus && <div className={"nearby-feedback" + (searchingNearby ? " pending" : nearbyMosques.length ? " success" : " error")} role="status" aria-live="polite">
-                  {searchingNearby && <span className="nearby-spinner"/>}<span>{nearbyStatus}</span>
-                </div>}
-                <select className="field radius-select" value={nearbyRadius} onChange={event => setNearbyRadius(Number(event.target.value))} aria-label="Nearby search radius">
-                  <option value={3000}>Within 3 km</option><option value={6000}>Within 6 km</option><option value={10000}>Within 10 km</option>
-                </select>
-                <p className="small-note location-privacy">Your location is used for the search only. Nearby listings are provided by OpenStreetMap.</p>
-                <NearbyMosqueResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy} onSelect={chooseNearbyMosque}/>
+                <div className="waqt-connect-box">
+                  <div className="waqt-connect-heading"><CalendarDays size={17}/><strong>Waqt UK timetable</strong></div>
+                  {mosque?.waqt_slug && <div className="waqt-connected-label"><CheckCircle2 size={14}/> Connected: {mosque.name}</div>}
+                  <a className="secondary-btn full external-link" href="https://waqt.uk/" target="_blank" rel="noreferrer">
+                    <MapPin size={15}/> Find your nearest mosque on Waqt UK <ExternalLink size={13}/>
+                  </a>
+                  <a className="waqt-directory-link" href="https://waqt.uk/nottingham/" target="_blank" rel="noreferrer">
+                    Browse Nottingham mosque directory <ExternalLink size={11}/>
+                  </a>
+                  <label className="field-label" htmlFor="settings-waqt-slug">Waqt mosque page or slug</label>
+                  <input id="settings-waqt-slug" className="field" value={waqtSlug} onChange={event => setWaqtSlug(event.target.value)}
+                    placeholder={mosque?.waqt_slug || "https://waqt.uk/masjid-name/"} autoCapitalize="none" autoCorrect="off"/>
+                  <p className="small-note">Paste a mosque page from Waqt. Noor securely retrieves and caches its published timetable for today and tomorrow.</p>
+                  <button className="primary-btn full" onClick={connectWaqtMosque} disabled={connectingWaqt || busy || !waqtSlug.trim()}>
+                    <RefreshCw size={15}/>{connectingWaqt ? "Refreshing timetable…" : "Connect / refresh Waqt timetable"}
+                  </button>
+                  {mosque?.waqt_slug && <a className="waqt-directory-link" href={mosque.waqt_url || "https://waqt.uk/" + mosque.waqt_slug + "/"} target="_blank" rel="noreferrer">
+                    View selected mosque on Waqt <ExternalLink size={11}/>
+                  </a>}
+                  <p className="waqt-attribution-note">Times from Waqt · no API key required · cached at most once an hour.</p>
+                </div>
                 <div className="setting-line"><span>Time zone</span><strong>Europe/London</strong></div>
                 <div className="setting-line"><span>Asr preference</span>
                   <select className="inline-select" value={asrSchool} onChange={event => setAsrSchool(event.target.value)}>
@@ -1006,41 +919,6 @@ export default function App() {
         </nav>}
         <footer className="footer-note">Made with intention <span>✦</span> Noor Prayer Companion</footer>
       </div>
-    </div>
-  );
-}
-
-function NearbyMosqueResults({ items, selectedId, disabled, onSelect }: {
-  items: NearbyMosque[];
-  selectedId: string;
-  disabled: boolean;
-  onSelect: (item: NearbyMosque) => void;
-}) {
-  if (!items.length) return null;
-  return (
-    <div className="nearby-results">
-      <div className="nearby-results-heading">
-        <strong>Nearby mosques</strong>
-        <span>{items.length} found</span>
-      </div>
-      {items.map(item => (
-        <button className={"nearby-mosque" + (item.mosqueId === selectedId ? " selected" : "")}
-          key={item.osmKey} onClick={() => onSelect(item)} disabled={disabled}>
-          <span className="nearby-mosque-icon"><Building2 size={17}/></span>
-          <span className="nearby-mosque-details">
-            <strong>{item.name}</strong>
-            <small>{item.address || item.city}</small>
-            <small>{item.distanceKm < 1 ? "Less than 1 km" : item.distanceKm.toFixed(1) + " km"} away</small>
-            <span className={"timetable-status " + (item.timetableAvailable ? "available" : "missing")}>
-              {item.timetableAvailable
-                ? "Timetable available · " + item.availableDays + " day(s)"
-                : "No verified timetable yet"}
-            </span>
-          </span>
-          <span className="nearby-pick">{item.mosqueId === selectedId ? <CheckCircle2 size={19}/> : <ChevronRight size={18}/>}</span>
-        </button>
-      ))}
-      <p className="osm-attribution">Map data © OpenStreetMap contributors</p>
     </div>
   );
 }
