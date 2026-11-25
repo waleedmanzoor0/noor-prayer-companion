@@ -86,9 +86,12 @@ Deno.serve(async (req) => {
       const { data: subscriptions } = await admin
         .from("push_subscriptions").select("user_id, subscription").eq("user_id", row.user_id);
       const { data: prefRow } = await admin.from("user_preferences")
-        .select("notifications_enabled, prayer_notification_preferences")
+        .select("notifications_enabled, prayer_notification_preferences, preferred_mosque_id")
         .eq("user_id", row.user_id).maybeSingle();
       if (prefRow?.notifications_enabled === false) continue;
+      // A user may still have older mosque rows cached after switching.
+      // Only the currently selected mosque is allowed to trigger reminders.
+      if (prefRow?.preferred_mosque_id && prefRow.preferred_mosque_id !== row.mosque_id) continue;
 
       for (const [name, column] of prayerColumns) {
         const prayerTime = String(row[column]).slice(0, 8);
