@@ -894,7 +894,7 @@ export default function App() {
                   <input id="settings-waqt-slug" className="field" value={waqtSlug} onChange={event => setWaqtSlug(event.target.value)}
                     placeholder={mosque?.waqt_slug || "https://waqt.uk/masjid-name/"} autoCapitalize="none" autoCorrect="off"/>
                   <p className="small-note">Paste a mosque page from Waqt. Noor securely retrieves and caches its published timetable for today and tomorrow.</p>
-                  <button className="primary-btn full" onClick={connectWaqtMosque} disabled={connectingWaqt || busy || !waqtSlug.trim()}>
+                  <button className="primary-btn full" onClick={() => void connectWaqtMosque()} disabled={connectingWaqt || busy || !waqtSlug.trim()}>
                     <RefreshCw size={15}/>{connectingWaqt ? "Refreshing timetable…" : "Connect / refresh Waqt timetable"}
                   </button>
                   {mosque?.waqt_slug && <a className="waqt-directory-link" href={mosque.waqt_url || "https://waqt.uk/" + mosque.waqt_slug + "/"} target="_blank" rel="noreferrer">
