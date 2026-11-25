@@ -38,7 +38,7 @@ export function parseCsv(text: string): Omit<PrayerRow, "id" | "mosque_id">[] {
     for (const name of ["fajr", "dhuhr", "asr", "maghrib", "isha"]) {
       if (!/^\d{1,2}:\d{2}$/.test(get(name))) throw new Error(`Row ${i + 2}: ${name} must be HH:MM.`);
     }
-    for (const name of ["fajr_jamaat", "dhuhr_jamaat", "asr_jamaat", "isha_jamaat"]) {
+    for (const name of ["fajr_jamaat", "dhuhr_jamaat", "asr_jamaat", "maghrib_jamaat", "isha_jamaat"]) {
       if (get(name) && !/^\d{1,2}:\d{2}$/.test(get(name))) {
         throw new Error(`Row ${i + 2}: ${name} must be HH:MM when supplied.`);
       }
@@ -54,6 +54,7 @@ export function parseCsv(text: string): Omit<PrayerRow, "id" | "mosque_id">[] {
       fajr_jamaat: get("fajr_jamaat") || null,
       dhuhr_jamaat: get("dhuhr_jamaat") || null,
       asr_jamaat: get("asr_jamaat") || null,
+      maghrib_jamaat: get("maghrib_jamaat") || null,
       isha_jamaat: get("isha_jamaat") || null,
       source: get("source") || "User-imported local mosque timetable"
     };
