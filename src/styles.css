@@ -241,3 +241,17 @@ button{cursor:pointer}
   .nearby-mosque-badges{gap:4px}
   .nearby-mosque-badges .timetable-status{font-size:7px}
 }
+
+
+/* First-visit welcome and sign-in */
+.welcome-auth-screen{padding-top:34px}
+.welcome-auth-screen h1{max-width:420px}
+.welcome-auth-screen>.muted{max-width:420px;font-size:12px;line-height:1.7;margin:6px 0 20px}
+.welcome-auth-features{display:flex;flex-direction:column;gap:12px;width:100%;margin:0 0 20px;padding:15px 14px;border:1px solid var(--line);border-radius:16px;background:var(--surface2)}
+.welcome-auth-features>div{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:10px;line-height:1.4}
+.welcome-auth-features svg{color:var(--gold);flex-shrink:0}
+.welcome-auth-screen .setting-card{width:100%;margin:0}
+.welcome-auth-screen .setup-footnote{width:100%;text-align:center;margin-top:16px}
+.welcome-loading{justify-content:center;align-items:center;text-align:center}
+.welcome-loading .setup-brand{margin-left:auto;margin-right:auto}
+.welcome-loading>.muted{font-size:11px}
