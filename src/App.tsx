@@ -86,6 +86,7 @@ export default function App() {
   const [madhhab, setMadhhab] = useState<Madhhab>("Hanafi");
   const [mosqueRadius, setMosqueRadius] = useState(5);
   const [nearbyMosques, setNearbyMosques] = useState<NearbyMasjid[]>([]);
+  const [nearbyResultsOpen, setNearbyResultsOpen] = useState(false);
   const [searchingMosques, setSearchingMosques] = useState(false);
   const [masjidiSyncing, setMasjidiSyncing] = useState(false);
   const autoMasjidiRefreshAttempt = useRef("");
@@ -592,6 +593,7 @@ export default function App() {
     }
     setSearchingMosques(true);
     setNearbyMosques([]);
+    setNearbyResultsOpen(true);
     setMessage("");
     try {
       const { data, error } = await supabase.functions.invoke("masjidi-discover", {
@@ -605,12 +607,14 @@ export default function App() {
         throw error;
       }
       if (data?.error) throw new Error(String(data.error));
-      const results = (data?.mosques || []) as NearbyMasjid[];
+      const results = ((data?.mosques || []) as NearbyMasjid[])
+        .filter(item => item.prayerTimesAvailable);
       setPostcode(data?.postcode || value);
       setNearbyMosques(results);
+      setNearbyResultsOpen(results.length > 0);
       setMessage(results.length
-        ? "Found " + results.length + " nearby mosque" + (results.length === 1 ? "." : "s.")
-        : "No mosques were found within " + mosqueRadius + " miles. Try a wider search radius.");
+        ? "Found " + results.length + " mosques with prayer times."
+        : "No mosques with published prayer times were found within " + mosqueRadius + " miles. Try a wider search radius.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not search for nearby mosques.");
     } finally {
@@ -707,6 +711,7 @@ export default function App() {
       }
 
       setSelectedMosqueId(item.mosqueId);
+      setNearbyResultsOpen(false);
       setMonthCursor(new Date(year, month - 1, 1));
       setSelectedDate(localDateKey());
       setMosques(previous => previous.some(m => m.id === item.mosqueId)
@@ -992,7 +997,7 @@ export default function App() {
                 <label className="field-label" htmlFor="setup-postcode">Your UK postcode</label>
                 <div className="postcode-search-row">
                   <input id="setup-postcode" className="field" value={postcode}
-                    onChange={event => setPostcode(event.target.value.toUpperCase())}
+                    onChange={event => { setPostcode(event.target.value.toUpperCase()); setNearbyResultsOpen(false); }}
                     placeholder="e.g. NG2 7PR" autoCapitalize="characters" autoCorrect="off" autoComplete="postal-code"/>
                   <select className="field postcode-radius" value={mosqueRadius} onChange={event => setMosqueRadius(Number(event.target.value))} aria-label="Search radius">
                     <option value={3}>3 mi</option><option value={5}>5 mi</option><option value={10}>10 mi</option>
@@ -1002,7 +1007,7 @@ export default function App() {
                   <MapPin size={16}/>{searchingMosques ? "Finding nearby mosques…" : "Find nearby mosques"}
                 </button>
                 {mosque && <div className="mosque-choice"><MapPin size={16}/><div><strong>{mosque.name}</strong><span>{mosque.address || mosque.city}</span></div><CheckCircle2 size={18}/></div>}
-                <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, false)}/>
+                {nearbyResultsOpen && <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, false)}/ >}
                 <p className="small-note privacy-note">Your postcode is used to find nearby mosques and saved to your Noor profile. Noor does not request GPS location.</p>
               </>}
               {setupStep === 1 && <>
@@ -1178,7 +1183,7 @@ export default function App() {
                 <button className="secondary-btn full" onClick={discoverNearbyMosques} disabled={searchingMosques || busy || !postcode.trim()}>
                   <MapPin size={16}/>{searchingMosques ? "Finding nearby mosques…" : "Find nearby mosques"}
                 </button>
-                <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, true)}/>
+                {nearbyResultsOpen && <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, true)}/ >}
                 {mosque && <div className="mosque-address"><MapPin size={15}/><span>Selected: {mosque.name} · {mosque.address || mosque.city}</span></div>}
                 <div className="setting-line"><span>Madhhab</span>
                   <select className="inline-select" value={madhhab} onChange={event => setMadhhab(event.target.value as Madhhab)}>
@@ -1271,14 +1276,15 @@ function NearbyMasjidResults({ items, selectedId, disabled, onSelect }: {
   disabled: boolean;
   onSelect: (item: NearbyMasjid) => void;
 }) {
-  if (!items.length) return null;
+  const selectableItems = items.filter(item => item.prayerTimesAvailable);
+  if (!selectableItems.length) return null;
   return (
     <div className="nearby-results">
       <div className="nearby-results-heading">
         <strong>Nearby mosques</strong>
-        <span>{items.length} found</span>
+        <span>{selectableItems.length} available</span>
       </div>
-      {items.map(item => (
+      {selectableItems.map(item => (
         <div className={"nearby-mosque-card" + (item.mosqueId === selectedId ? " selected" : "")} key={item.masjidiId}>
           <div className="nearby-mosque-icon"><Building2 size={17}/></div>
           <div className="nearby-mosque-details">
@@ -1286,16 +1292,14 @@ function NearbyMasjidResults({ items, selectedId, disabled, onSelect }: {
             <small>{[item.address, item.city, item.postcode].filter(Boolean).join(", ")}</small>
             <small>{item.distanceMiles === null ? "Distance unavailable" : item.distanceMiles.toFixed(1) + " miles away"}</small>
             <div className="nearby-mosque-badges">
-              <span className={item.prayerTimesAvailable ? "timetable-status available" : "timetable-status missing"}>
-                {item.prayerTimesAvailable ? "Prayer times available" : "Directory listing only"}
-              </span>
-              {item.prayerTimesAvailable && <span className={item.jamaatTimesAvailable ? "timetable-status available" : "timetable-status missing"}>
+              <span className="timetable-status available">Prayer times available</span>
+              <span className={item.jamaatTimesAvailable ? "timetable-status available" : "timetable-status missing"}>
                 {item.jamaatTimesAvailable ? "Jamaat data available" : "No Jamaat times published"}
-              </span>}
+              </span>
             </div>
             {item.phone && <small>{item.phone}</small>}
           </div>
-          <button className="nearby-select-btn" disabled={disabled || !item.prayerTimesAvailable}
+          <button className="nearby-select-btn" disabled={disabled}
             onClick={() => onSelect(item)} aria-label={"Select " + item.name}>
             {item.mosqueId === selectedId ? <CheckCircle2 size={18}/> : <ChevronRight size={18}/>}
           </button>
