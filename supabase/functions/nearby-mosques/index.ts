@@ -129,8 +129,8 @@ out center tags 80;`;
     // Race them so one slow public endpoint doesn't hold up the user.
     const controllers: AbortController[] = [];
     const endpoints = [
-      "https://overpass.private.coffee/api/interpreter",
       "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+      "https://overpass.private.coffee/api/interpreter",
     ];
     let osmData: any;
     try {
