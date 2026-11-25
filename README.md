@@ -59,8 +59,8 @@ Noor uses the selected mosque's published timetable rather than estimating times
 To import a mosque timetable, sign in and open Settings → Mosque Timetable Management. CSV columns are:
 
 ```csv
-date,fajr,sunrise,dhuhr,asr,maghrib,isha,fajr_jamaat,dhuhr_jamaat,asr_jamaat,isha_jamaat,source
-2026-12-01,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,Official mosque timetable
+date,fajr,sunrise,dhuhr,asr,maghrib,isha,fajr_jamaat,dhuhr_jamaat,asr_jamaat,maghrib_jamaat,isha_jamaat,source
+2026-12-01,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,HH:MM,Official mosque timetable
 ```
 
 Use YYYY-MM-DD dates and 24-hour HH:MM values. Jamaat columns are optional; do not enter estimated values.
@@ -72,6 +72,7 @@ Noor can connect to Waqt UK without an API key. Users open Waqt's directory, cho
 - The file contains today's and tomorrow's times, the mosque page URL, a revision, London timezone, prayer starts, and optional Jamaat times.
 - Waqt does not provide a downloadable API for every mosque. Noor therefore uses Waqt's own nearby finder/directory for discovery and requires the user to choose the specific mosque page.
 - The secured `waqt-timetable` Edge Function fetches the feed and caches it per mosque. A private `waqt_feed_cache` table enforces no more than one request per mosque per hour across Noor users.
+- Noor checks a selected Waqt mosque when the app opens on a new UK day. A user can also manually refresh the timetable from Settings.
 - Noor converts Waqt's prayer-specific clock notation into UK 24-hour times, preserves separate Jamaat fields, and marks entries listed in `calculatedBegins` as **Calculated start**.
 - Waqt's special Maghrib/iftar convention is applied when there is no `jMaghrib`.
 - Noor displays **Times from Waqt** with a link to Waqt wherever Waqt times appear.
@@ -94,6 +95,7 @@ The following functions are deployed:
 - `register-push` — registers a signed-in user's browser push subscription.
 - `test-notification` — sends a test push to the signed-in user's registered devices.
 - `dispatch-prayer-notifications` — checks the current Europe/London minute and sends prayer notifications.
+- `waqt-timetable` — retrieves and caches one Waqt mosque's today/tomorrow feed, enforcing the shared hourly limit.
 
 They use Supabase's injected publishable/secret key environment dictionaries, with legacy-key fallbacks.
 
@@ -144,7 +146,7 @@ npm run build
 ## Known limitations
 
 - CSV parsing is simple and does not support quoted commas.
-- The month calendar can browse all dates currently imported for the selected mosque; it does not yet automatically retrieve future months from the mosque.
+- Waqt supplies today and tomorrow only. Its API does not provide a monthly timetable, so the calendar displays only dates available in Noor's database.
 - Prayer reminder preferences and some display preferences are currently stored locally rather than synchronised across devices.
 - Background Adhan audio is not implemented.
 - A production release should add stronger timetable administration, subscription cleanup, delivery observability, backup/restore, and end-to-end testing.
