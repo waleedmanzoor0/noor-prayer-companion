@@ -63,6 +63,65 @@ function getCalendarCells(value: Date) {
   ];
 }
 
+type OsmElement = {
+  type: "node" | "way" | "relation";
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: Record<string, string>;
+};
+
+async function fetchNearbyOsmElements(latitude: number, longitude: number, radiusMeters: number): Promise<OsmElement[]> {
+  const query = `[out:json][timeout:12];
+(
+  nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="place_of_worship"]["religion"="muslim"]["name"];
+  nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="mosque"]["name"];
+  nwr(around:${radiusMeters},${latitude},${longitude})["building"="mosque"]["name"];
+  nwr(around:${radiusMeters},${latitude},${longitude})["place_of_worship"="mosque"]["name"];
+);
+out center tags 80;`;
+
+  const endpoints = [
+    "https://overpass.private.coffee/api/interpreter",
+    "https://overpass-api.de/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  ];
+  const controllers: AbortController[] = [];
+
+  const request = async (endpoint: string): Promise<OsmElement[]> => {
+    const controller = new AbortController();
+    controllers.push(controller);
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body: new URLSearchParams({ data: query }).toString(),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error("Map provider returned HTTP " + response.status + ".");
+      }
+      const payload = await response.json() as { elements?: unknown[]; remark?: string };
+      if (payload.remark) throw new Error(payload.remark);
+      if (!Array.isArray(payload.elements)) throw new Error("The map provider returned an invalid response.");
+      return payload.elements as OsmElement[];
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  };
+
+  try {
+    return await Promise.any(endpoints.map(request));
+  } catch {
+    throw new Error("Nearby mosque maps are temporarily unavailable. Please try again shortly.");
+  } finally {
+    controllers.forEach(controller => controller.abort());
+  }
+}
+
+
 export default function App() {
   const [now, setNow] = useState(new Date());
   const [tab, setTab] = useState<Tab>("home");
@@ -412,12 +471,19 @@ export default function App() {
     setMessage("");
     try {
       const position = await getDevicePosition();
-      setNearbyStatus("Location received. Searching for mosques within " + (nearbyRadius / 1000) + " km…");
+      setNearbyStatus("Location received. Searching map providers for mosques within " + (nearbyRadius / 1000) + " km…");
+      const elements = await fetchNearbyOsmElements(
+        position.coords.latitude,
+        position.coords.longitude,
+        nearbyRadius,
+      );
+      setNearbyStatus("Found map data. Checking which mosques have verified prayer timetables…");
       const { data, error } = await supabase.functions.invoke("nearby-mosques", {
         body: {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           radiusMeters: nearbyRadius,
+          elements: elements.slice(0, 100),
         },
       });
       if (error) {
