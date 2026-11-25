@@ -191,3 +191,20 @@ button{cursor:pointer}
 .waqt-attribution-note{font-size:9px;color:var(--muted);line-height:1.5;margin:10px 1px 0;text-align:center}
 .waqt-inline-link{color:var(--gold);font-weight:650;text-decoration:none}
 .prayer-calculated{font-size:8px;color:var(--muted);font-style:italic;font-weight:500}
+
+
+/* Global prayer notification pause/resume control */
+.notification-master-card{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:3px 0 12px;padding:14px;border:1px solid var(--line);border-radius:15px;background:var(--surface2)}
+.notification-master-copy{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.notification-master-copy strong{font-size:12px;line-height:1.4;color:var(--text)}
+.notification-master-copy>span:last-child{font-size:10px;line-height:1.5;color:var(--muted)}
+.notification-master-state{display:inline-flex;align-items:center;border-radius:99px;padding:3px 7px;font-size:8px;font-weight:800;letter-spacing:1px;background:rgba(92,170,121,.13);color:#5caa79}
+.notifications-paused .notification-master-state{background:rgba(190,116,92,.13);color:#c17b67}
+.notification-switch{position:relative;display:block;width:48px;height:29px;flex-shrink:0;cursor:pointer}
+.notification-switch input{position:absolute;width:1px;height:1px;opacity:0}
+.notification-switch-track{position:absolute;inset:0;border-radius:99px;background:#8a8d89;transition:background .18s,opacity .18s}
+.notification-switch-track>span{position:absolute;top:3px;left:3px;width:23px;height:23px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:transform .18s}
+.notification-switch input:checked+.notification-switch-track{background:var(--gold)}
+.notification-switch input:checked+.notification-switch-track>span{transform:translateX(19px);background:#17251e}
+.notification-switch input:focus-visible+.notification-switch-track{outline:3px solid var(--gold2);outline-offset:3px}
+.notification-switch input:disabled+.notification-switch-track{opacity:.5;cursor:wait}
