@@ -926,42 +926,38 @@ export default function App() {
             <div className="setup-card">
               <div className="setup-step-label">STEP {setupStep + 1} OF 3</div>
               {setupStep === 0 && <>
-                <div className="setup-icon"><Building2 size={23}/></div>
-                <h2>Choose your mosque</h2>
-                <p className="muted">Noor will use its timetable for your daily prayer times and reminders.</p>
-                <label className="field-label" htmlFor="setup-mosque">Your mosque</label>
-                <select id="setup-mosque" className="field" value={selectedMosqueId} onChange={event => setSelectedMosqueId(event.target.value)}>
-                  <option value="">Choose a mosque</option>
-                  {mosques.map(item => <option key={item.id} value={item.id}>{item.name} · {item.city}</option>)}
-                </select>
-                {mosque && <div className="mosque-choice"><MapPin size={16}/><div><strong>{mosque.name}</strong><span>{mosque.address}</span></div><CheckCircle2 size={18}/></div>}
-                <div className="waqt-connect-box">
-                  <div className="waqt-connect-heading"><CalendarDays size={17}/><strong>Use a Waqt UK mosque timetable</strong></div>
-                  <a className="secondary-btn full external-link" href="https://waqt.uk/" target="_blank" rel="noreferrer">
-                    <MapPin size={15}/> Find your nearest mosque on Waqt UK <ExternalLink size={13}/>
-                  </a>
-                  <a className="waqt-directory-link" href="https://waqt.uk/nottingham/" target="_blank" rel="noreferrer">
-                    Browse Nottingham mosque directory <ExternalLink size={11}/>
-                  </a>
-                  <label className="field-label" htmlFor="setup-waqt-slug">Waqt mosque page or slug</label>
-                  <input id="setup-waqt-slug" className="field" value={waqtSlug} onChange={event => setWaqtSlug(event.target.value)}
-                    placeholder="https://waqt.uk/shahjalal/ or shahjalal" autoCapitalize="none" autoCorrect="off"/>
-                  <p className="small-note">Open Waqt, choose your mosque, then paste its page address here. Noor fetches today's and tomorrow's published times.</p>
-                  <button className="primary-btn full" onClick={() => void connectWaqtMosque()} disabled={connectingWaqt || busy || !waqtSlug.trim()}>
-                    <RefreshCw size={15}/>{connectingWaqt ? "Connecting to Waqt…" : "Connect Waqt timetable"}
-                  </button>
-                  <p className="waqt-attribution-note">Times from Waqt · cached at most once an hour.</p>
+                <div className="setup-icon"><MapPin size={23}/></div>
+                <h2>Find your local mosque</h2>
+                <p className="muted">Enter your postcode and Noor will find nearby mosques with published prayer times.</p>
+                <label className="field-label" htmlFor="setup-postcode">Your UK postcode</label>
+                <div className="postcode-search-row">
+                  <input id="setup-postcode" className="field" value={postcode}
+                    onChange={event => setPostcode(event.target.value.toUpperCase())}
+                    placeholder="e.g. NG2 7PR" autoCapitalize="characters" autoCorrect="off" autoComplete="postal-code"/>
+                  <select className="field postcode-radius" value={mosqueRadius} onChange={event => setMosqueRadius(Number(event.target.value))} aria-label="Search radius">
+                    <option value={3}>3 mi</option><option value={5}>5 mi</option><option value={10}>10 mi</option>
+                  </select>
                 </div>
+                <button className="primary-btn full" onClick={discoverNearbyMosques} disabled={searchingMosques || busy || !postcode.trim()}>
+                  <MapPin size={16}/>{searchingMosques ? "Finding nearby mosques…" : "Find nearby mosques"}
+                </button>
+                {mosque && <div className="mosque-choice"><MapPin size={16}/><div><strong>{mosque.name}</strong><span>{mosque.address || mosque.city}</span></div><CheckCircle2 size={18}/></div>}
+                <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy} onSelect={item => void selectNearbyMasjid(item, false)}/>
+                <p className="small-note privacy-note">Your postcode is used to find nearby mosques and saved to your Noor profile. Noor does not request GPS location.</p>
               </>}
               {setupStep === 1 && <>
                 <div className="setup-icon"><Moon size={23}/></div>
-                <h2>Prayer preferences</h2>
-                <p className="muted">Your selected mosque timetable provides the times. Choose the Asr school used for your practice.</p>
-                <div className="preference-choice">
-                  <button className={asrSchool === "Hanafi" ? "selected" : ""} onClick={() => setAsrSchool("Hanafi")}><strong>Hanafi</strong><span>Later Asr calculation</span></button>
-                  <button className={asrSchool === "Standard" ? "selected" : ""} onClick={() => setAsrSchool("Standard")}><strong>Standard</strong><span>Earlier Asr calculation</span></button>
+                <h2>Choose your madhhab</h2>
+                <p className="muted">Select the school of thought you follow. You can change this anytime in Settings.</p>
+                <div className="madhhab-grid">
+                  {(["Hanafi", "Maliki", "Shafi'i", "Hanbali"] as Madhhab[]).map(option => (
+                    <button key={option} className={madhhab === option ? "selected" : ""} onClick={() => setMadhhab(option)}>
+                      <span className="madhhab-radio">{madhhab === option && <CheckCircle2 size={16}/>}</span>
+                      <strong>{option}</strong>
+                    </button>
+                  ))}
                 </div>
-                <p className="small-note">Fazilat Masjid's timetable timings remain authoritative when selected. This choice is saved as your preference.</p>
+                <p className="small-note">Your mosque's published timetable stays authoritative. Noor saves your madhhab preference separately and will not silently alter mosque-provided times.</p>
               </>}
               {setupStep === 2 && <>
                 <div className="setup-icon"><BellRing size={23}/></div>
@@ -974,7 +970,7 @@ export default function App() {
               <div className="setup-actions">
                 {setupStep > 0 && <button className="secondary-btn" onClick={() => setSetupStep(step => step - 1)} disabled={busy}>Back</button>}
                 {setupStep < 2 ? <button className="primary-btn" onClick={() => {
-                  if (setupStep === 0 && !selectedMosqueId) { setMessage("Choose your mosque to continue."); return; }
+                  if (setupStep === 0 && (!postcode.trim() || !selectedMosqueId)) { setMessage("Enter your postcode, search nearby mosques and choose one to continue."); return; }
                   setSetupStep(step => step + 1);
                 }}>Continue <ChevronRight size={16}/></button> :
                   <button className="primary-btn" onClick={finishSetup} disabled={busy || !selectedMosqueId}>{busy ? "Setting up Noor…" : "Finish setup"} <CheckCircle2 size={16}/></button>}
@@ -1012,9 +1008,11 @@ export default function App() {
                 </> : <div className="empty-next"><Clock3 size={24}/><strong>{monthRows.length ? "No upcoming prayer time found" : "Your timetable is waiting"}</strong><span>{monthRows.length ? "Check your next month's timetable or refresh the schedule." : "Choose a mosque with an available timetable to get started."}</span></div>}
                 <div className="hero-footer">
                   <span><ShieldCheck size={14}/> {asrSchool} Asr</span>
-                  {mosque?.waqt_slug
-                    ? <a className="waqt-inline-link" href="https://waqt.uk/" target="_blank" rel="noreferrer">Times from Waqt <ExternalLink size={10}/></a>
-                    : <span>Europe/London</span>}
+                  {mosque?.masjidi_id
+                    ? <span className="masjidi-attribution">Times from Masjidi</span>
+                    : mosque?.waqt_slug
+                      ? <a className="waqt-inline-link" href="https://waqt.uk/" target="_blank" rel="noreferrer">Times from Waqt <ExternalLink size={10}/></a>
+                      : <span>Europe/London</span>}
                 </div>
               </section>
 
@@ -1042,6 +1040,7 @@ export default function App() {
                 </div>)}
                 {todayRow.sunrise && <div className="sunrise-row"><Sun size={14}/> Sunrise <span>{formatClock(todayRow.sunrise)}</span></div>}
                 <div className="source-note">{mosque?.name || "Local mosque"} · {todayRow.source || "Mosque timetable"}
+                  {mosque?.masjidi_id && <> · <span className="masjidi-attribution">Times from Masjidi</span></>}
                   {mosque?.waqt_slug && <> · <a className="waqt-inline-link" href="https://waqt.uk/" target="_blank" rel="noreferrer">Times from Waqt</a></>}
                 </div>
               </div>}
@@ -1101,38 +1100,27 @@ export default function App() {
               <div className="settings-group-label">YOUR PLACE</div>
               <div className="setting-card">
                 <div className="setting-title"><Building2/><div><strong>Mosque & location</strong><span>Your timetable source and local time</span></div></div>
-                <label className="field-label" htmlFor="settings-mosque">Preferred mosque</label>
-                <select id="settings-mosque" className="field" value={selectedMosqueId} onChange={event => void changePreferredMosque(event.target.value)} disabled={busy}>
-                  <option value="">Choose a mosque</option>{mosques.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
-                {mosque && <div className="mosque-address"><MapPin size={15}/><span>{mosque.address || mosque.city}</span></div>}
-                <div className="waqt-connect-box">
-                  <div className="waqt-connect-heading"><CalendarDays size={17}/><strong>Waqt UK timetable</strong></div>
-                  {mosque?.waqt_slug && <div className="waqt-connected-label"><CheckCircle2 size={14}/> Connected: {mosque.name}</div>}
-                  <a className="secondary-btn full external-link" href="https://waqt.uk/" target="_blank" rel="noreferrer">
-                    <MapPin size={15}/> Find your nearest mosque on Waqt UK <ExternalLink size={13}/>
-                  </a>
-                  <a className="waqt-directory-link" href="https://waqt.uk/nottingham/" target="_blank" rel="noreferrer">
-                    Browse Nottingham mosque directory <ExternalLink size={11}/>
-                  </a>
-                  <label className="field-label" htmlFor="settings-waqt-slug">Waqt mosque page or slug</label>
-                  <input id="settings-waqt-slug" className="field" value={waqtSlug} onChange={event => setWaqtSlug(event.target.value)}
-                    placeholder={mosque?.waqt_slug || "https://waqt.uk/masjid-name/"} autoCapitalize="none" autoCorrect="off"/>
-                  <p className="small-note">Paste a mosque page from Waqt. Noor securely retrieves and caches its published timetable for today and tomorrow.</p>
-                  <button className="primary-btn full" onClick={() => void connectWaqtMosque()} disabled={connectingWaqt || busy || !waqtSlug.trim()}>
-                    <RefreshCw size={15}/>{connectingWaqt ? "Refreshing timetable…" : "Connect / refresh Waqt timetable"}
-                  </button>
-                  {mosque?.waqt_slug && <a className="waqt-directory-link" href={mosque.waqt_url || "https://waqt.uk/" + mosque.waqt_slug + "/"} target="_blank" rel="noreferrer">
-                    View selected mosque on Waqt <ExternalLink size={11}/>
-                  </a>}
-                  <p className="waqt-attribution-note">Times from Waqt · no API key required · cached at most once an hour.</p>
-                </div>
-                <div className="setting-line"><span>Time zone</span><strong>Europe/London</strong></div>
-                <div className="setting-line"><span>Asr preference</span>
-                  <select className="inline-select" value={asrSchool} onChange={event => setAsrSchool(event.target.value)}>
-                    <option>Hanafi</option><option>Standard</option>
+                <label className="field-label" htmlFor="settings-postcode">Your UK postcode</label>
+                <div className="postcode-search-row">
+                  <input id="settings-postcode" className="field" value={postcode}
+                    onChange={event => setPostcode(event.target.value.toUpperCase())}
+                    placeholder="e.g. NG2 7PR" autoCapitalize="characters" autoCorrect="off" autoComplete="postal-code"/>
+                  <select className="field postcode-radius" value={mosqueRadius} onChange={event => setMosqueRadius(Number(event.target.value))} aria-label="Search radius">
+                    <option value={3}>3 mi</option><option value={5}>5 mi</option><option value={10}>10 mi</option>
                   </select>
                 </div>
+                <button className="secondary-btn full" onClick={discoverNearbyMosques} disabled={searchingMosques || busy || !postcode.trim()}>
+                  <MapPin size={16}/>{searchingMosques ? "Finding nearby mosques…" : "Find nearby mosques"}
+                </button>
+                <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy} onSelect={item => void selectNearbyMasjid(item, true)}/>
+                {mosque && <div className="mosque-address"><MapPin size={15}/><span>Selected: {mosque.name} · {mosque.address || mosque.city}</span></div>}
+                <div className="setting-line"><span>Madhhab</span>
+                  <select className="inline-select" value={madhhab} onChange={event => setMadhhab(event.target.value as Madhhab)}>
+                    <option>Hanafi</option><option>Maliki</option><option>Shafi'i</option><option>Hanbali</option>
+                  </select>
+                </div>
+                <div className="setting-line"><span>Time zone</span><strong>Europe/London</strong></div>
+                <p className="small-note">Mosque-published prayer times are used as supplied. Your madhhab preference is saved separately.</p>
               </div>
 
               <div className="settings-group-label">PRAYER REMINDERS</div>
@@ -1190,7 +1178,7 @@ export default function App() {
                 {showImportTools && <div className="import-tools">
                   <p className="small-note">CSV columns: date, fajr, sunrise, dhuhr, asr, maghrib, isha, fajr_jamaat, dhuhr_jamaat, asr_jamaat, isha_jamaat, source. Use YYYY-MM-DD dates and 24-hour HH:MM times.</p>
                   <textarea className="csv-area" value={csvText} onChange={event => setCsvText(event.target.value)}
-                    placeholder={"date,fajr,sunrise,dhuhr,asr,maghrib,isha,fajr_jamaat,dhuhr_jamaat,asr_jamaat,isha_jamaat,source\n2026-12-01,05:50,08:00,11:55,14:00,15:45,17:50,06:45,13:30,14:30,19:00,Official mosque timetable"}/>
+                    placeholder={"date,fajr,sunrise,dhuhr,asr,maghrib,isha,fajr_jamaat,dhuhr_jamaat,asr_jamaat,maghrib_jamaat,isha_jamaat,source\n2026-12-01,05:50,08:00,11:55,14:00,15:45,17:50,06:45,13:30,14:30,19:00,Official mosque timetable"}/>
                   <button className="primary-btn full" onClick={importCsv} disabled={busy || !csvText.trim() || !supabase}><Upload size={16}/> Import timetable</button>
                 </div>}
               </div>
@@ -1207,6 +1195,47 @@ export default function App() {
         </nav>}
         <footer className="footer-note">Made with intention <span>✦</span> Noor Prayer Companion</footer>
       </div>
+    </div>
+  );
+}
+
+function NearbyMasjidResults({ items, selectedId, disabled, onSelect }: {
+  items: NearbyMasjid[];
+  selectedId: string;
+  disabled: boolean;
+  onSelect: (item: NearbyMasjid) => void;
+}) {
+  if (!items.length) return null;
+  return (
+    <div className="nearby-results">
+      <div className="nearby-results-heading">
+        <strong>Nearby mosques</strong>
+        <span>{items.length} found</span>
+      </div>
+      {items.map(item => (
+        <div className={"nearby-mosque-card" + (item.mosqueId === selectedId ? " selected" : "")} key={item.masjidiId}>
+          <div className="nearby-mosque-icon"><Building2 size={17}/></div>
+          <div className="nearby-mosque-details">
+            <strong>{item.name}</strong>
+            <small>{[item.address, item.city, item.postcode].filter(Boolean).join(", ")}</small>
+            <small>{item.distanceMiles === null ? "Distance unavailable" : item.distanceMiles.toFixed(1) + " miles away"}</small>
+            <div className="nearby-mosque-badges">
+              <span className={item.prayerTimesAvailable ? "timetable-status available" : "timetable-status missing"}>
+                {item.prayerTimesAvailable ? "Prayer times available" : "Directory listing only"}
+              </span>
+              {item.prayerTimesAvailable && <span className={item.jamaatTimesAvailable ? "timetable-status available" : "timetable-status missing"}>
+                {item.jamaatTimesAvailable ? "Jamaat data available" : "No Jamaat times published"}
+              </span>}
+            </div>
+            {item.phone && <small>{item.phone}</small>}
+          </div>
+          <button className="nearby-select-btn" disabled={disabled || !item.prayerTimesAvailable}
+            onClick={() => onSelect(item)} aria-label={"Select " + item.name}>
+            {item.mosqueId === selectedId ? <CheckCircle2 size={18}/> : <ChevronRight size={18}/>}
+          </button>
+        </div>
+      ))}
+      <p className="nearby-results-footnote">Mosque directory and prayer data provided by Masjidi.</p>
     </div>
   );
 }
