@@ -73,6 +73,7 @@ export default function App() {
   const [loadingRows, setLoadingRows] = useState(false);
   const [message, setMessage] = useState("");
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -127,10 +128,17 @@ export default function App() {
   }, [prefs]);
 
   useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => setSessionEmail(data.session?.user.email ?? null));
+    if (!supabase) {
+      setAuthReady(true);
+      return;
+    }
+    supabase.auth.getSession().then(({ data }) => {
+      setSessionEmail(data.session?.user.email ?? null);
+      setAuthReady(true);
+    }).catch(() => setAuthReady(true));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSessionEmail(session?.user.email ?? null);
+      setAuthReady(true);
       if (session) {
         setOtpSent(false);
         setOtp("");
@@ -936,7 +944,29 @@ export default function App() {
           </div>
         </header>
 
-        {setupRequired && sessionEmail && prefsLoaded ? (
+        {!authReady ? (
+          <main className="setup-screen welcome-loading">
+            <div className="setup-brand">ن</div>
+            <div className="eyebrow">NOOR PRAYER COMPANION</div>
+            <h1>Preparing Noor.</h1>
+            <p className="muted">Your prayer companion is getting ready.</p>
+            <span className="nearby-spinner"/>
+          </main>
+        ) : !sessionEmail ? (
+          <main className="setup-screen welcome-auth-screen">
+            <div className="setup-brand">ن</div>
+            <div className="eyebrow">A CALMER WAY TO STAY CONNECTED</div>
+            <h1>Welcome to Noor<span className="gold">.</span></h1>
+            <p className="muted">Your local prayer times, mosque timetable and gentle reminders — thoughtfully brought together.</p>
+            <div className="welcome-auth-features">
+              <div><MapPin size={16}/><span>Find nearby mosques using your postcode</span></div>
+              <div><Moon size={16}/><span>Personalise your madhhab and prayer preferences</span></div>
+              <div><Bell size={16}/><span>Choose the reminders that suit you</span></div>
+            </div>
+            {signedOutCard}
+            <p className="setup-footnote">Your details and preferences stay linked to your Noor account.</p>
+          </main>
+        ) : setupRequired && prefsLoaded ? (
           <main className="setup-screen">
             <div className="setup-brand">ن</div>
             <div className="eyebrow">WELCOME TO NOOR</div>
@@ -1216,7 +1246,7 @@ export default function App() {
 
         {message && <div className="toast" role="status"><AlertCircle size={16}/><span>{message}</span><button onClick={() => setMessage("")}><X size={15}/></button></div>}
 
-        {!(setupRequired && sessionEmail && prefsLoaded) && <nav className="bottom-nav">
+        {sessionEmail && !(setupRequired && prefsLoaded) && <nav className="bottom-nav">
           <button className={tab === "home" ? "selected" : ""} onClick={() => setTab("home")}><Moon/><span>Home</span></button>
           <button className={tab === "timetable" ? "selected" : ""} onClick={() => setTab("timetable")}><CalendarDays/><span>Timetable</span></button>
           <button className={tab === "settings" ? "selected" : ""} onClick={() => setTab("settings")}><Settings/><span>Settings</span></button>
