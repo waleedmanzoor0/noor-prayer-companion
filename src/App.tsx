@@ -790,7 +790,12 @@ export default function App() {
                   {next.jamaat && <div className="next-jamaat">Jamaat {formatClock(next.jamaat)}</div>}
                   {next.date !== todayKey && <div className="next-jamaat">{formatDateLabel(next.date, { weekday: "long", day: "numeric", month: "short" })}</div>}
                 </> : <div className="empty-next"><Clock3 size={24}/><strong>{monthRows.length ? "No upcoming prayer time found" : "Your timetable is waiting"}</strong><span>{monthRows.length ? "Check your next month's timetable or refresh the schedule." : "Choose a mosque with an available timetable to get started."}</span></div>}
-                <div className="hero-footer"><span><ShieldCheck size={14}/> {asrSchool} Asr</span><span>Europe/London</span></div>
+                <div className="hero-footer">
+                  <span><ShieldCheck size={14}/> {asrSchool} Asr</span>
+                  {mosque?.waqt_slug
+                    ? <a className="waqt-inline-link" href="https://waqt.uk/" target="_blank" rel="noreferrer">Times from Waqt <ExternalLink size={10}/></a>
+                    : <span>Europe/London</span>}
+                </div>
               </section>
 
               <section className="section-head section-head-premium">
