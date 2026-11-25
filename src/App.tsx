@@ -306,7 +306,7 @@ export default function App() {
   useEffect(() => {
     if (!sessionEmail || !prefsLoaded || setupRequired || !selectedMosqueId) return;
     const selected = mosques.find(item => item.id === selectedMosqueId);
-    if (!selected?.waqt_slug) return;
+    if (!selected?.waqt_slug || selected.masjidi_id) return;
     const refreshKey = selected.id + ":" + todayKey;
     if (autoWaqtRefreshAttempt.current === refreshKey) return;
     autoWaqtRefreshAttempt.current = refreshKey;
@@ -552,6 +552,153 @@ export default function App() {
     }
   }
 
+  async function discoverNearbyMosques() {
+    if (!supabase || !sessionEmail) {
+      setMessage("Sign in to Noor before searching for nearby mosques.");
+      return;
+    }
+    const value = postcode.trim().toUpperCase();
+    if (!value) {
+      setMessage("Enter your UK postcode to find nearby mosques.");
+      return;
+    }
+    setSearchingMosques(true);
+    setNearbyMosques([]);
+    setMessage("");
+    try {
+      const { data, error } = await supabase.functions.invoke("masjidi-discover", {
+        body: { postcode: value, radiusMiles: mosqueRadius },
+      });
+      if (error) {
+        if ("context" in error && error.context instanceof Response) {
+          const detail = await error.context.clone().json().catch(() => null) as { error?: string } | null;
+          throw new Error(detail?.error || error.message);
+        }
+        throw error;
+      }
+      if (data?.error) throw new Error(String(data.error));
+      const results = (data?.mosques || []) as NearbyMasjid[];
+      setPostcode(data?.postcode || value);
+      setNearbyMosques(results);
+      setMessage(results.length
+        ? "Found " + results.length + " nearby mosque" + (results.length === 1 ? "." : "s.")
+        : "No mosques were found within " + mosqueRadius + " miles. Try a wider search radius.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not search for nearby mosques.");
+    } finally {
+      setSearchingMosques(false);
+    }
+  }
+
+  async function syncMasjidiMonth(
+    mosqueId: string,
+    masjidiId: string,
+    year: number,
+    month: number,
+    silent = false,
+  ) {
+    if (!supabase || !sessionEmail) throw new Error("Sign in to Noor before syncing mosque prayer times.");
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) throw userError || new Error("Please sign in again.");
+
+    if (!silent) setMasjidiSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("masjidi-timetable", {
+        body: { mosqueId, masjidiId, year, month },
+      });
+      if (error) {
+        if ("context" in error && error.context instanceof Response) {
+          const detail = await error.context.clone().json().catch(() => null) as { error?: string } | null;
+          throw new Error(detail?.error || error.message);
+        }
+        throw error;
+      }
+      if (data?.error) throw new Error(String(data.error));
+      if (!data?.daysImported) throw new Error("Masjidi has not published a complete timetable for this month.");
+
+      const firstDay = year + "-" + String(month).padStart(2, "0") + "-01";
+      const lastDay = year + "-" + String(month).padStart(2, "0") + "-" + String(new Date(year, month, 0).getDate()).padStart(2, "0");
+      const { data: rows, error: rowsError } = await supabase.from("prayer_times")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("mosque_id", mosqueId)
+        .gte("prayer_date", firstDay)
+        .lte("prayer_date", lastDay)
+        .order("prayer_date");
+      if (rowsError) throw rowsError;
+      if (rows?.length) {
+        setMonthRows(previous => {
+          const byDate = new Map(previous.map(item => [item.prayer_date, item]));
+          (rows as PrayerRow[]).forEach(row => byDate.set(row.prayer_date, row));
+          return [...byDate.values()].sort((a, b) => a.prayer_date.localeCompare(b.prayer_date));
+        });
+      }
+      if (!silent) {
+        setMessage(
+          "Updated " + data.daysImported + " prayer days from Masjidi." +
+          (data.jamaatDays ? " Jamaat times are available for " + data.jamaatDays + " day(s)." : " Jamaat times have not been published for this mosque.")
+        );
+      }
+      return data;
+    } finally {
+      if (!silent) setMasjidiSyncing(false);
+    }
+  }
+
+  async function selectNearbyMasjid(item: NearbyMasjid, persistSelection = false) {
+    if (!item.prayerTimesAvailable) {
+      setMessage("This mosque is listed in Masjidi, but it does not currently publish complete prayer start times.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const nowParts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Europe/London", year: "numeric", month: "2-digit",
+      }).formatToParts(new Date());
+      const year = Number(nowParts.find(part => part.type === "year")?.value);
+      const month = Number(nowParts.find(part => part.type === "month")?.value);
+
+      await syncMasjidiMonth(item.mosqueId, item.masjidiId, year, month, false);
+      if (persistSelection) {
+        const { data: { user }, error: userError } = await supabase!.auth.getUser();
+        if (userError || !user) throw userError || new Error("Please sign in again.");
+        const { error } = await supabase!.from("user_preferences").upsert({
+          user_id: user.id,
+          preferred_mosque_id: item.mosqueId,
+          postcode: postcode.trim().toUpperCase() || null,
+          location: postcode.trim().toUpperCase() || "United Kingdom",
+          timezone: "Europe/London",
+          madhhab,
+          asr_school: madhhab === "Hanafi" ? "Hanafi" : "Standard",
+          notifications_enabled: notificationsEnabled,
+          prayer_notification_preferences: prefs,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" });
+        if (error) throw error;
+      }
+
+      setSelectedMosqueId(item.mosqueId);
+      setMonthCursor(new Date(year, month - 1, 1));
+      setSelectedDate(localDateKey());
+      setMosques(previous => previous.some(m => m.id === item.mosqueId)
+        ? previous.map(m => m.id === item.mosqueId ? {
+            ...m, name: item.name, address: item.address, city: item.city,
+            masjidi_id: item.masjidiId, masjidi_supported: true,
+            masjidi_db_supported: item.dbSupported, timetable_source: "Times from Masjidi",
+          } : m)
+        : [...previous, {
+            id: item.mosqueId, name: item.name, address: item.address, city: item.city,
+            masjidi_id: item.masjidiId, masjidi_supported: true,
+            masjidi_db_supported: item.dbSupported, timetable_source: "Times from Masjidi",
+          }]);
+      setMessage(item.name + " selected. Noor has imported its published monthly timetable.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not select this mosque.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveMosqueChoiceAndCopy(mosqueId: string) {
     const client = supabase;
     if (!client || !sessionEmail) throw new Error("Sign in before choosing a mosque.");
@@ -560,9 +707,11 @@ export default function App() {
     const { error: preferenceError } = await client.from("user_preferences").upsert({
       user_id: user.id,
       preferred_mosque_id: mosqueId,
-      location: "Near me, UK",
+      location: postcode.trim().toUpperCase() || "United Kingdom",
+      postcode: postcode.trim().toUpperCase() || null,
       timezone: "Europe/London",
-      asr_school: asrSchool,
+      madhhab,
+      asr_school: madhhab === "Hanafi" ? "Hanafi" : "Standard",
       notifications_enabled: notificationsEnabled,
       prayer_notification_preferences: prefs,
       updated_at: new Date().toISOString(),
@@ -592,6 +741,37 @@ export default function App() {
       return;
     }
     const chosen = mosques.find(item => item.id === mosqueId);
+    if (chosen?.masjidi_id) {
+      setBusy(true);
+      try {
+        const result = await syncMasjidiMonth(
+          mosqueId, chosen.masjidi_id,
+          monthCursor.getFullYear(), monthCursor.getMonth() + 1, false,
+        );
+        const { data: { user } } = await supabase!.auth.getUser();
+        if (!user) throw new Error("Please sign in again.");
+        const { error } = await supabase!.from("user_preferences").upsert({
+          user_id: user.id,
+          preferred_mosque_id: mosqueId,
+          postcode: postcode.trim().toUpperCase() || null,
+          location: postcode.trim().toUpperCase() || "United Kingdom",
+          timezone: "Europe/London",
+          madhhab,
+          asr_school: madhhab === "Hanafi" ? "Hanafi" : "Standard",
+          notifications_enabled: notificationsEnabled,
+          prayer_notification_preferences: prefs,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" });
+        if (error) throw error;
+        setSelectedMosqueId(mosqueId);
+        setMessage("Preferred mosque updated. " + (result?.daysImported || 0) + " timetable days loaded.");
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not update your preferred mosque.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (chosen?.waqt_slug) {
       setWaqtSlug(chosen.waqt_slug);
       await connectWaqtMosque(chosen.waqt_slug);
@@ -615,9 +795,11 @@ export default function App() {
     const { error } = await supabase.from("user_preferences").upsert({
       user_id: user.id,
       preferred_mosque_id: selectedMosqueId || null,
-      location: "Nottingham, UK",
+      location: postcode.trim().toUpperCase() || "United Kingdom",
+      postcode: postcode.trim().toUpperCase() || null,
       timezone: "Europe/London",
-      asr_school: asrSchool,
+      madhhab,
+      asr_school: madhhab === "Hanafi" ? "Hanafi" : "Standard",
       notifications_enabled: notificationsEnabled,
       prayer_notification_preferences: prefs,
       updated_at: new Date().toISOString(),
