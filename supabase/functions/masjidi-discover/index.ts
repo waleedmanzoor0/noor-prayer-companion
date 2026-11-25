@@ -124,6 +124,8 @@ Deno.serve(async (req) => {
 
       const prayerTimesAvailable = hasFiveStartTimes(item) || bool(item.db_supported);
       const jamaatTimesAvailable = hasAnyIqamah(item);
+      // Keep unsupported directory-only entries out of Noor's selectable mosque list and database.
+      if (!prayerTimesAvailable) continue;
       const values = {
         name,
         address: cleanText(item.address, 250) || null,
