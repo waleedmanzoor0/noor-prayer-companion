@@ -147,6 +147,7 @@ export default function App() {
           const stored = (data.prayer_notification_preferences || {}) as Partial<Prefs>;
           if (active) {
             setSelectedMosqueId(data.preferred_mosque_id || "");
+            setWaqtSlug(available.find(item => item.id === data.preferred_mosque_id)?.waqt_slug || "");
             setAsrSchool(data.asr_school || "Hanafi");
             setNotificationsEnabled(data.notifications_enabled !== false);
             setPrefs({
@@ -394,8 +395,14 @@ export default function App() {
 
       const payload = data?.payload as WaqtPayload | undefined;
       const mosqueData = data?.mosque as Mosque | undefined;
-      if (!payload || !mosqueData?.id || !payload.today) {
-        throw new Error("Waqt did not return a complete mosque timetable.");
+      if (!payload || !mosqueData?.id) {
+        throw new Error("Waqt did not return a complete mosque record.");
+      }
+      if (data?.currentForUkDate === false) {
+        throw new Error("Waqt is still serving its previous cached day. To respect its hourly limit, please try again later.");
+      }
+      if (!payload.today && !payload.tomorrow) {
+        throw new Error("Waqt has not published prayer times for today or tomorrow yet.");
       }
 
       const { data: { user }, error: userError } = await client.auth.getUser();
