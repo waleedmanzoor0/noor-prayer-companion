@@ -1007,7 +1007,7 @@ export default function App() {
                   <MapPin size={16}/>{searchingMosques ? "Finding nearby mosques…" : "Find nearby mosques"}
                 </button>
                 {mosque && <div className="mosque-choice"><MapPin size={16}/><div><strong>{mosque.name}</strong><span>{mosque.address || mosque.city}</span></div><CheckCircle2 size={18}/></div>}
-                {nearbyResultsOpen && <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, false)}/ >}
+                {nearbyResultsOpen && <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, false)}/>}
                 <p className="small-note privacy-note">Your postcode is used to find nearby mosques and saved to your Noor profile. Noor does not request GPS location.</p>
               </>}
               {setupStep === 1 && <>
@@ -1183,7 +1183,7 @@ export default function App() {
                 <button className="secondary-btn full" onClick={discoverNearbyMosques} disabled={searchingMosques || busy || !postcode.trim()}>
                   <MapPin size={16}/>{searchingMosques ? "Finding nearby mosques…" : "Find nearby mosques"}
                 </button>
-                {nearbyResultsOpen && <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, true)}/ >}
+                {nearbyResultsOpen && <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, true)}/>}
                 {mosque && <div className="mosque-address"><MapPin size={15}/><span>Selected: {mosque.name} · {mosque.address || mosque.city}</span></div>}
                 <div className="setting-line"><span>Madhhab</span>
                   <select className="inline-select" value={madhhab} onChange={event => setMadhhab(event.target.value as Madhhab)}>
