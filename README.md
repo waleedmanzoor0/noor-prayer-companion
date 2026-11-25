@@ -66,7 +66,7 @@ date,fajr,sunrise,dhuhr,asr,maghrib,isha,fajr_jamaat,dhuhr_jamaat,asr_jamaat,ish
 Use YYYY-MM-DD dates and 24-hour HH:MM values. Jamaat columns are optional; do not enter estimated values.
 ## Nearby mosque discovery
 
-Signed-in users can choose **Find mosques near me** during setup or from Settings. Noor asks the device for location permission only when the user taps the button, then sends the coordinates to the authenticated `nearby-mosques` Edge Function. That function queries OpenStreetMap's Overpass API and returns named mosque listings within a user-selected 3, 6 or 10 km radius, sorted by distance.
+The signed-in app requests the user's location only after tapping Find mosques near me. The browser queries OpenStreetMap's Overpass API directly using standard form-encoded cross-origin requests and races several public providers. It sends the resulting public map features to the authenticated nearby-mosques Edge Function, which validates them, calculates distances, matches Noor's mosque directory and checks timetable availability. Results are sorted by distance within a user-selected 3, 6 or 10 km radius.
 
 The app does not save the device coordinates in the Noor profile. The coordinates are used in the search request and are forwarded to OpenStreetMap's public map-data service. OpenStreetMap attribution is displayed with the results.
 
