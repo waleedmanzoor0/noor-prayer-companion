@@ -87,6 +87,7 @@ export default function App() {
   const [nearbyMosques, setNearbyMosques] = useState<NearbyMasjid[]>([]);
   const [searchingMosques, setSearchingMosques] = useState(false);
   const [masjidiSyncing, setMasjidiSyncing] = useState(false);
+  const autoMasjidiRefreshAttempt = useRef("");
   const [monthRows, setMonthRows] = useState<PrayerRow[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(() => localDateKey());
@@ -300,6 +301,22 @@ export default function App() {
   const monthRowsOnly = monthRows.filter(item => item.prayer_date.startsWith(dateKey(monthCursor.getFullYear(), monthCursor.getMonth(), 1).slice(0, 7)));
   const calendarCells = getCalendarCells(monthCursor);
   const selectedLabel = formatDateLabel(selectedDate, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+  const selectedMasjidiMosque = mosques.find(item => item.id === selectedMosqueId && item.masjidi_id);
+
+  useEffect(() => {
+    if (!sessionEmail || !prefsLoaded || setupRequired || !selectedMasjidiMosque?.masjidi_id) return;
+    const key = selectedMasjidiMosque.id + ":" + monthCursor.getFullYear() + "-" + String(monthCursor.getMonth() + 1);
+    if (autoMasjidiRefreshAttempt.current === key) return;
+    autoMasjidiRefreshAttempt.current = key;
+    void syncMasjidiMonth(
+      selectedMasjidiMosque.id,
+      selectedMasjidiMosque.masjidi_id,
+      monthCursor.getFullYear(),
+      monthCursor.getMonth() + 1,
+      true,
+    ).catch(error => setMessage(error instanceof Error ? error.message : "Could not refresh the mosque timetable."));
+  }, [sessionEmail, prefsLoaded, setupRequired, selectedMasjidiMosque?.id, selectedMasjidiMosque?.masjidi_id, monthCursor]);
 
   // Refresh a selected Waqt mosque once when Noor opens on a new UK day.
   // The server-side shared cache still enforces Waqt's hourly request limit.
@@ -659,6 +676,7 @@ export default function App() {
       const month = Number(nowParts.find(part => part.type === "month")?.value);
 
       await syncMasjidiMonth(item.mosqueId, item.masjidiId, year, month, false);
+      autoMasjidiRefreshAttempt.current = item.mosqueId + ":" + year + "-" + String(month);
       if (persistSelection) {
         const { data: { user }, error: userError } = await supabase!.auth.getUser();
         if (userError || !user) throw userError || new Error("Please sign in again.");
@@ -748,6 +766,7 @@ export default function App() {
           mosqueId, chosen.masjidi_id,
           monthCursor.getFullYear(), monthCursor.getMonth() + 1, false,
         );
+        autoMasjidiRefreshAttempt.current = mosqueId + ":" + monthCursor.getFullYear() + "-" + String(monthCursor.getMonth() + 1);
         const { data: { user } } = await supabase!.auth.getUser();
         if (!user) throw new Error("Please sign in again.");
         const { error } = await supabase!.from("user_preferences").upsert({
@@ -938,11 +957,11 @@ export default function App() {
                     <option value={3}>3 mi</option><option value={5}>5 mi</option><option value={10}>10 mi</option>
                   </select>
                 </div>
-                <button className="primary-btn full" onClick={discoverNearbyMosques} disabled={searchingMosques || busy || !postcode.trim()}>
+                <button className="primary-btn full" onClick={discoverNearbyMosques} disabled={searchingMosques || masjidiSyncing || busy || !postcode.trim()}>
                   <MapPin size={16}/>{searchingMosques ? "Finding nearby mosques…" : "Find nearby mosques"}
                 </button>
                 {mosque && <div className="mosque-choice"><MapPin size={16}/><div><strong>{mosque.name}</strong><span>{mosque.address || mosque.city}</span></div><CheckCircle2 size={18}/></div>}
-                <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy} onSelect={item => void selectNearbyMasjid(item, false)}/>
+                <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, false)}/>
                 <p className="small-note privacy-note">Your postcode is used to find nearby mosques and saved to your Noor profile. Noor does not request GPS location.</p>
               </>}
               {setupStep === 1 && <>
@@ -1007,7 +1026,7 @@ export default function App() {
                   {next.date !== todayKey && <div className="next-jamaat">{formatDateLabel(next.date, { weekday: "long", day: "numeric", month: "short" })}</div>}
                 </> : <div className="empty-next"><Clock3 size={24}/><strong>{monthRows.length ? "No upcoming prayer time found" : "Your timetable is waiting"}</strong><span>{monthRows.length ? "Check your next month's timetable or refresh the schedule." : "Choose a mosque with an available timetable to get started."}</span></div>}
                 <div className="hero-footer">
-                  <span><ShieldCheck size={14}/> {asrSchool} Asr</span>
+                  <span><ShieldCheck size={14}/> {madhhab} preference</span>
                   {mosque?.masjidi_id
                     ? <span className="masjidi-attribution">Times from Masjidi</span>
                     : mosque?.waqt_slug
@@ -1112,7 +1131,7 @@ export default function App() {
                 <button className="secondary-btn full" onClick={discoverNearbyMosques} disabled={searchingMosques || busy || !postcode.trim()}>
                   <MapPin size={16}/>{searchingMosques ? "Finding nearby mosques…" : "Find nearby mosques"}
                 </button>
-                <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy} onSelect={item => void selectNearbyMasjid(item, true)}/>
+                <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, true)}/>
                 {mosque && <div className="mosque-address"><MapPin size={15}/><span>Selected: {mosque.name} · {mosque.address || mosque.city}</span></div>}
                 <div className="setting-line"><span>Madhhab</span>
                   <select className="inline-select" value={madhhab} onChange={event => setMadhhab(event.target.value as Madhhab)}>
