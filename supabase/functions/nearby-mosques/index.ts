@@ -85,66 +85,40 @@ Deno.serve(async (req) => {
       return Response.json({ error: "A valid location is required." }, { status: 400, headers: corsHeaders });
     }
 
-    // Ask only for named mosque/worship features; the app only displays named entries.
-    // Keep the query small because public Overpass instances are shared community services.
-    const query = `[out:json][timeout:8];
-(
-  nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="place_of_worship"]["religion"="muslim"]["name"];
-  nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="mosque"]["name"];
-  nwr(around:${radiusMeters},${latitude},${longitude})["building"="mosque"]["name"];
-  nwr(around:${radiusMeters},${latitude},${longitude})["place_of_worship"="mosque"]["name"];
-);
-out center tags 80;`;
+    // The browser queries OpenStreetMap directly. Supabase only validates and
+    // matches the returned public map features against Noor's mosque/timetable data.
+    // This avoids outbound Overpass timeouts from the Edge Function region.
+    if (!Array.isArray(body.elements) || body.elements.length > 100) {
+      throw new Error("No valid mosque search results were supplied. Please run the nearby search again.");
+    }
 
-    async function requestOverpass(endpoint: string): Promise<any> {
-      const controller = new AbortController();
-      controllers.push(controller);
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      try {
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-            "Accept": "application/json",
-            "User-Agent": "NoorPrayerCompanion/1.0",
-            "Referer": "https://waleedmanzoor.co.uk/noor-prayer-companion/",
-          },
-          body: "data=" + encodeURIComponent(query),
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          const detail = (await response.text().catch(() => "")).slice(0, 180);
-          throw new Error("HTTP " + response.status + (detail ? ": " + detail : ""));
+    const cleanedElements = body.elements.map((item: any) => {
+      if (!item || !["node", "way", "relation"].includes(String(item.type)) ||
+          !Number.isSafeInteger(Number(item.id)) || Number(item.id) <= 0) return null;
+
+      const tags: Record<string, string> = {};
+      if (item.tags && typeof item.tags === "object" && !Array.isArray(item.tags)) {
+        for (const [key, value] of Object.entries(item.tags)) {
+          if (typeof value === "string") tags[key] = value.slice(0, 500);
         }
-        const data = await response.json();
-        if (data?.remark) throw new Error(String(data.remark).slice(0, 180));
-        if (!Array.isArray(data?.elements)) throw new Error("The map provider returned an unreadable response.");
-        return data;
-      } finally {
-        clearTimeout(timeout);
       }
-    }
 
-    // These are two independently operated, global OpenStreetMap Overpass instances.
-    // Race them so one slow public endpoint doesn't hold up the user.
-    const controllers: AbortController[] = [];
-    const endpoints = [
-      "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-      "https://overpass.private.coffee/api/interpreter",
-    ];
-    let osmData: any;
-    try {
-      osmData = await Promise.any(endpoints.map(requestOverpass));
-    } catch (error) {
-      const failures = error instanceof AggregateError ? error.errors : [error];
-      console.error("[nearby-mosques] all map providers failed:", failures.map((item: unknown) =>
-        item instanceof Error ? item.message : String(item)
-      ));
-      throw new Error("The OpenStreetMap directory is temporarily busy. Please try again shortly.");
-    } finally {
-      // Cancel the slower request once a usable answer has arrived.
-      for (const controller of controllers) controller.abort();
-    }
+      const element: any = {
+        type: String(item.type),
+        id: Number(item.id),
+        tags,
+      };
+      if (Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lon))) {
+        element.lat = Number(item.lat);
+        element.lon = Number(item.lon);
+      }
+      if (Number.isFinite(Number(item.center?.lat)) && Number.isFinite(Number(item.center?.lon))) {
+        element.center = { lat: Number(item.center.lat), lon: Number(item.center.lon) };
+      }
+      return element;
+    }).filter((item: any) => item !== null);
+
+    const osmData = { elements: cleanedElements };
 
     const url = Deno.env.get("SUPABASE_URL")!;
     const admin = createClient(url, getSecretKey());
