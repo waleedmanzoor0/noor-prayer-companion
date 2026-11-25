@@ -85,6 +85,7 @@ export default function App() {
   });
   const [asrSchool, setAsrSchool] = useState("Hanafi");
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [savingNotificationSetting, setSavingNotificationSetting] = useState(false);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
   const [setupStep, setSetupStep] = useState(0);
@@ -367,8 +368,48 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
+  async function updateGlobalNotifications(enabled: boolean) {
+    const previous = notificationsEnabled;
+    setNotificationsEnabled(enabled);
+
+    if (!supabase || !sessionEmail || !prefsLoaded || setupRequired) return;
+
+    setSavingNotificationSetting(true);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw userError || new Error("Please sign in again.");
+
+      const { error } = await supabase.from("user_preferences").upsert({
+        user_id: user.id,
+        preferred_mosque_id: selectedMosqueId || null,
+        location: "Nottingham, UK",
+        timezone: "Europe/London",
+        asr_school: asrSchool,
+        notifications_enabled: enabled,
+        prayer_notification_preferences: prefs,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id" });
+      if (error) throw error;
+
+      setMessage(enabled
+        ? "Prayer notifications are switched on."
+        : "All Noor prayer notifications are paused. You can turn them back on at any time.");
+    } catch (error) {
+      setNotificationsEnabled(previous);
+      setMessage(error instanceof Error
+        ? "Could not save your notification setting: " + error.message
+        : "Could not save your notification setting.");
+    } finally {
+      setSavingNotificationSetting(false);
+    }
+  }
+
   async function testNotification() {
     if (!supabase || !sessionEmail) return;
+    if (!notificationsEnabled) {
+      setMessage("Prayer notifications are paused. Turn them back on before sending a test.");
+      return;
+    }
     setBusy(true);
     try {
       const { error } = await supabase.functions.invoke("test-notification");
@@ -891,8 +932,21 @@ export default function App() {
               <div className="settings-group-label">PRAYER REMINDERS</div>
               <div className="setting-card">
                 <div className="setting-title"><Bell/><div><strong>Notifications</strong><span>Choose which prayers can notify you</span></div></div>
-                <div className="toggle-line global-toggle"><div><strong>All prayer notifications</strong><span>Master switch for your reminders</span></div>
-                  <input type="checkbox" checked={notificationsEnabled} onChange={event => setNotificationsEnabled(event.target.checked)}/>
+                <div className={"notification-master-card" + (notificationsEnabled ? " notifications-on" : " notifications-paused")}>
+                  <div className="notification-master-copy">
+                    <span className="notification-master-state">{notificationsEnabled ? "ON" : "PAUSED"}</span>
+                    <strong>{notificationsEnabled ? "Prayer notifications are on" : "All prayer notifications are paused"}</strong>
+                    <span>{notificationsEnabled
+                      ? "Turn this switch off to stop every scheduled Noor prayer alert."
+                      : "No scheduled prayer alerts will be sent. Turn this back on whenever you want."}</span>
+                  </div>
+                  <label className="notification-switch">
+                    <input type="checkbox" role="switch" aria-label="Enable all Noor prayer notifications"
+                      checked={notificationsEnabled}
+                      disabled={savingNotificationSetting}
+                      onChange={event => void updateGlobalNotifications(event.target.checked)}/>
+                    <span className="notification-switch-track" aria-hidden="true"><span/></span>
+                  </label>
                 </div>
                 {prayerNames.map(name => <div className="toggle-line" key={name}>
                   <div><strong>{name}</strong><span>Prayer-start reminder</span></div>
@@ -900,8 +954,13 @@ export default function App() {
                     onChange={event => setPrefs(old => ({ ...old, [name]: { ...old[name], enabled: event.target.checked } }))}/>
                 </div>)}
                 <div className="status-line"><span className={"status-dot " + (pushState.startsWith("Enabled") ? "green" : "")}/>{pushState}</div>
-                <button className="primary-btn full" onClick={enablePush} disabled={busy || pushState.startsWith("Enabled")}><BellRing size={16}/>{pushState.startsWith("Enabled") ? "This device is enabled" : "Enable on this device"}</button>
-                <button className="secondary-btn full" onClick={testNotification} disabled={busy || !sessionEmail}>Send test notification</button>
+                <button className="primary-btn full" onClick={enablePush}
+                  disabled={busy || !notificationsEnabled || pushState.startsWith("Enabled")}>
+                  <BellRing size={16}/>{!notificationsEnabled ? "Turn on prayer notifications first" : pushState.startsWith("Enabled") ? "This device is enabled" : "Enable on this device"}
+                </button>
+                <button className="secondary-btn full" onClick={testNotification} disabled={busy || !sessionEmail || !notificationsEnabled}>
+                  Send test notification
+                </button>
               </div>
 
               <div className="settings-group-label">APP PREFERENCES</div>
