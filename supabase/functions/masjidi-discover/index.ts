@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const postcode = cleanText(body.postcode, 16).toUpperCase().replace(/\s+/g, " ").trim();
     const radiusMiles = Math.min(15, Math.max(1, Number(body.radiusMiles) || 5));
-    if (!/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/.test(postcode.replace(/\s/g, ""))) {
+    if (!/^[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2}$/.test(postcode.replace(/\s/g, ""))) {
       return jsonError("Enter a valid UK postcode, for example NG2 7PR.", 400);
     }
 
