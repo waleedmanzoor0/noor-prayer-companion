@@ -526,43 +526,16 @@ export default function App() {
       setSelectedMosqueId("");
       return;
     }
+    const chosen = mosques.find(item => item.id === mosqueId);
+    if (chosen?.waqt_slug) {
+      setWaqtSlug(chosen.waqt_slug);
+      await connectWaqtMosque(chosen.waqt_slug);
+      return;
+    }
     setBusy(true);
     try {
-      const chosen = mosques.find(item => item.id === mosqueId);
-      if (chosen?.waqt_slug) {
-        setWaqtSlug(chosen.waqt_slug);
-        const { data, error } = await supabase!.functions.invoke("waqt-timetable", { body: { slug: chosen.waqt_slug } });
-        if (error) throw error;
-        if (data?.error) throw new Error(String(data.error));
-        const payload = data?.payload as WaqtPayload;
-        const { data: { user } } = await supabase!.auth.getUser();
-        if (!user) throw new Error("Please sign in again.");
-        const rows = [payload.today, payload.tomorrow].map(waqtDayToPrayerRow)
-          .filter((row): row is NonNullable<typeof row> => Boolean(row))
-          .map(row => ({ ...row, user_id: user.id, mosque_id: mosqueId }));
-        if (rows.length) {
-          const { error: upsertError } = await supabase!.from("prayer_times").upsert(rows, { onConflict: "user_id,prayer_date" });
-          if (upsertError) throw upsertError;
-          const { data: savedRows, error: savedRowsError } = await supabase!.from("prayer_times")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("mosque_id", mosqueId)
-            .in("prayer_date", rows.map(row => row.prayer_date));
-          if (savedRowsError) throw savedRowsError;
-          if (savedRows?.length) {
-            setMonthRows(previous => {
-              const byDate = new Map(previous.map(item => [item.prayer_date, item]));
-              (savedRows as PrayerRow[]).forEach(row => byDate.set(row.prayer_date, row));
-              return [...byDate.values()].sort((a, b) => a.prayer_date.localeCompare(b.prayer_date));
-            });
-          }
-        }
-        setSelectedMosqueId(mosqueId);
-        setMessage("Your Waqt mosque timetable has been refreshed.");
-      } else {
-        const days = await saveMosqueChoiceAndCopy(mosqueId);
-        setMessage(days ? "Your preferred mosque and timetable have been updated." : "Mosque selected. No verified timetable is available yet.");
-      }
+      const days = await saveMosqueChoiceAndCopy(mosqueId);
+      setMessage(days ? "Your preferred mosque and timetable have been updated." : "Mosque selected. No verified timetable is available yet.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not update your preferred mosque.");
     } finally {
