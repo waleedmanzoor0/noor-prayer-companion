@@ -28,7 +28,20 @@ type Mosque = {
   timetable_source: string | null;
   waqt_slug?: string | null;
   waqt_url?: string | null;
+  masjidi_id?: string | null;
+  masjidi_supported?: boolean;
+  masjidi_db_supported?: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
 };
+type NearbyMasjid = {
+  mosqueId: string; masjidiId: string; name: string;
+  address: string | null; city: string; postcode: string | null;
+  distanceMiles: number | null; phone: string | null; website: string | null;
+  denomination: string | null; prayerTimesAvailable: boolean;
+  jamaatTimesAvailable: boolean; lastUpdated: string | null; dbSupported: boolean;
+};
+type Madhhab = "Hanafi" | "Maliki" | "Shafi'i" | "Hanbali";
 type Tab = "home" | "timetable" | "settings";
 
 function dateKey(year: number, month: number, day: number) {
@@ -68,6 +81,12 @@ export default function App() {
   const [waqtSlug, setWaqtSlug] = useState("");
   const [connectingWaqt, setConnectingWaqt] = useState(false);
   const autoWaqtRefreshAttempt = useRef("");
+  const [postcode, setPostcode] = useState("");
+  const [madhhab, setMadhhab] = useState<Madhhab>("Hanafi");
+  const [mosqueRadius, setMosqueRadius] = useState(5);
+  const [nearbyMosques, setNearbyMosques] = useState<NearbyMasjid[]>([]);
+  const [searchingMosques, setSearchingMosques] = useState(false);
+  const [masjidiSyncing, setMasjidiSyncing] = useState(false);
   const [monthRows, setMonthRows] = useState<PrayerRow[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(() => localDateKey());
@@ -132,7 +151,7 @@ export default function App() {
       setBusy(true);
       try {
         const [{ data: mosqueData, error: mosqueError }, { data: { user }, error: userError }] = await Promise.all([
-          client.from("mosques").select("id,name,address,city,timetable_source,waqt_slug,waqt_url").order("name"),
+          client.from("mosques").select("id,name,address,city,timetable_source,waqt_slug,waqt_url,masjidi_id,masjidi_supported,masjidi_db_supported,latitude,longitude").order("name"),
           client.auth.getUser(),
         ]);
         if (mosqueError) throw mosqueError;
@@ -141,7 +160,7 @@ export default function App() {
         if (active) setMosques(available);
 
         const { data, error } = await client.from("user_preferences")
-          .select("preferred_mosque_id,location,timezone,asr_school,notifications_enabled,prayer_notification_preferences")
+          .select("preferred_mosque_id,location,timezone,asr_school,madhhab,postcode,notifications_enabled,prayer_notification_preferences")
           .eq("user_id", user.id).maybeSingle();
         if (error) throw error;
 
@@ -150,7 +169,9 @@ export default function App() {
           if (active) {
             setSelectedMosqueId(data.preferred_mosque_id || "");
             setWaqtSlug(available.find(item => item.id === data.preferred_mosque_id)?.waqt_slug || "");
-            setAsrSchool(data.asr_school || "Hanafi");
+            setPostcode(data.postcode || "");
+            setMadhhab((data.madhhab || data.asr_school || "Hanafi") as Madhhab);
+            setAsrSchool((data.madhhab || data.asr_school) === "Hanafi" ? "Hanafi" : "Standard");
             setNotificationsEnabled(data.notifications_enabled !== false);
             setPrefs({
               Fajr: { ...defaultPrefs.Fajr, ...(stored.Fajr || {}) },
@@ -163,7 +184,8 @@ export default function App() {
           }
         } else if (active) {
           setSetupRequired(true);
-          if (available[0]) setSelectedMosqueId(available[0].id);
+          setPostcode("");
+          setSelectedMosqueId("");
         }
         if (active) setPrefsLoaded(true);
       } catch (error) {
@@ -217,9 +239,11 @@ export default function App() {
       const { error } = await client.from("user_preferences").upsert({
         user_id: user.id,
         preferred_mosque_id: selectedMosqueId,
-        location: "Nottingham, UK",
+        location: postcode.trim().toUpperCase() || "United Kingdom",
+        postcode: postcode.trim().toUpperCase() || null,
         timezone: "Europe/London",
-        asr_school: asrSchool,
+        madhhab,
+        asr_school: madhhab === "Hanafi" ? "Hanafi" : "Standard",
         notifications_enabled: notificationsEnabled,
         prayer_notification_preferences: prefs,
         updated_at: new Date().toISOString(),
@@ -228,7 +252,7 @@ export default function App() {
     };
     void save();
     return () => { active = false; };
-  }, [prefs, asrSchool, notificationsEnabled, selectedMosqueId, prefsLoaded, setupRequired, sessionEmail]);
+  }, [prefs, madhhab, postcode, notificationsEnabled, selectedMosqueId, prefsLoaded, setupRequired, sessionEmail]);
 
   useEffect(() => {
     if (!sessionEmail) {
