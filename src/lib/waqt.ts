@@ -101,7 +101,10 @@ export function waqtDayToPrayerRow(day: WaqtDay | null): PrayerColumns | null {
   if (!fajr || !dhuhr || !asr || !maghrib || !isha) return null;
 
   const calculated = (day.calculatedBegins || [])
-    .map(value => String(value).toLowerCase())
+    .map(value => {
+      const prayer = String(value).toLowerCase();
+      return prayer === "dhuhr" ? "zuhr" : prayer;
+    })
     .filter(value => ["fajr", "zuhr", "asr", "maghrib", "isha"].includes(value));
 
   return {
