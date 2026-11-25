@@ -966,7 +966,15 @@ export default function App() {
             {signedOutCard}
             <p className="setup-footnote">Your details and preferences stay linked to your Noor account.</p>
           </main>
-        ) : setupRequired && prefsLoaded ? (
+        ) : !prefsLoaded ? (
+          <main className="setup-screen welcome-loading">
+            <div className="setup-brand">ن</div>
+            <div className="eyebrow">PERSONALISING YOUR PRAYER COMPANION</div>
+            <h1>One moment.</h1>
+            <p className="muted">Loading your saved mosque and preferences.</p>
+            <span className="nearby-spinner"/>
+          </main>
+        ) : setupRequired ? (
           <main className="setup-screen">
             <div className="setup-brand">ن</div>
             <div className="eyebrow">WELCOME TO NOOR</div>
@@ -1246,7 +1254,7 @@ export default function App() {
 
         {message && <div className="toast" role="status"><AlertCircle size={16}/><span>{message}</span><button onClick={() => setMessage("")}><X size={15}/></button></div>}
 
-        {sessionEmail && !(setupRequired && prefsLoaded) && <nav className="bottom-nav">
+        {sessionEmail && prefsLoaded && !setupRequired && <nav className="bottom-nav">
           <button className={tab === "home" ? "selected" : ""} onClick={() => setTab("home")}><Moon/><span>Home</span></button>
           <button className={tab === "timetable" ? "selected" : ""} onClick={() => setTab("timetable")}><CalendarDays/><span>Timetable</span></button>
           <button className={tab === "settings" ? "selected" : ""} onClick={() => setTab("settings")}><Settings/><span>Settings</span></button>
