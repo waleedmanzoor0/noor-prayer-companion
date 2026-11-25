@@ -89,9 +89,10 @@ Deno.serve(async (req) => {
         .select("notifications_enabled, prayer_notification_preferences, preferred_mosque_id")
         .eq("user_id", row.user_id).maybeSingle();
       if (prefRow?.notifications_enabled === false) continue;
-      // A user may still have older mosque rows cached after switching.
-      // Only the currently selected mosque is allowed to trigger reminders.
-      if (prefRow?.preferred_mosque_id && prefRow.preferred_mosque_id !== row.mosque_id) continue;
+      // No alerts are sent until onboarding has saved a selected mosque.
+      if (!prefRow?.preferred_mosque_id) continue;
+      // Ignore cached prayer rows left behind after a user switches mosque.
+      if (prefRow.preferred_mosque_id !== row.mosque_id) continue;
 
       for (const [name, column] of prayerColumns) {
         const prayerTime = String(row[column]).slice(0, 8);
