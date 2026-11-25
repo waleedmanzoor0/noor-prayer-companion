@@ -16,3 +16,11 @@ grant all privileges on table public.waqt_feed_cache to service_role;
 
 comment on table public.waqt_feed_cache is
   'Private server-side Waqt API response cache, keyed by mosque slug; enforces at most one request per mosque per hour.';
+
+drop policy if exists "Service role manages Waqt feed cache" on public.waqt_feed_cache;
+create policy "Service role manages Waqt feed cache"
+on public.waqt_feed_cache
+for all
+to service_role
+using (true)
+with check (true);
