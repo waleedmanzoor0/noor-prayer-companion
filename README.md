@@ -64,7 +64,31 @@ date,fajr,sunrise,dhuhr,asr,maghrib,isha,fajr_jamaat,dhuhr_jamaat,asr_jamaat,mag
 ```
 
 Use YYYY-MM-DD dates and 24-hour HH:MM values. Jamaat columns are optional; do not enter estimated values.
-## Waqt UK mosque timetables
+## Postcode-first setup and Masjidi mosque discovery
+
+New users complete a guided setup after email sign-in:
+
+1. Enter a UK postcode (no GPS permission is requested).
+2. Noor geocodes the postcode with Postcodes.io and searches Masjidi for nearby mosques within 3, 5 or 10 miles.
+3. The user selects a mosque with published prayer start times.
+4. The user chooses a madhhab (Hanafi, Maliki, Shafi'i or Hanbali).
+5. The user configures notifications or enables them later.
+
+The selected mosque's published prayer timetable remains authoritative. The madhhab is saved as a personal preference; Noor does not silently alter mosque-provided start times. A mosque listing without complete prayer starts is displayed as directory-only and cannot be selected as an active prayer timetable.
+
+### Masjidi integrations
+
+- `masjidi-discover` — authenticated postcode geocoding and nearby mosque search. It reads the Masjidi API key from Supabase Vault, never from browser code.
+- `masjidi-timetable` — authenticated monthly timetable retrieval and import for the selected mosque.
+- `masjidi_feed_cache` — private shared cache keyed by mosque/year/month to avoid repeated upstream calls.
+- Masjidi mosque records are linked by `masjidi_id`; start and Jamaat availability are tracked separately.
+- The timetable import labels imported data **Times from Masjidi** and preserves blank Jamaat times as unavailable rather than estimating them.
+
+The current Supabase Vault entry is named `masjidi_api_key`. The development integration currently uses the shared, rate-limited demo key. Replace that Vault secret with Noor's own developer key before a wider public rollout. Do not put an API key in `.env`, frontend code, or GitHub.
+
+Related migration: `0013_add_postcode_madhhab_masjidi_integration.sql`.
+
+## Existing Waqt UK timetable support (legacy saved mosques)
 
 Noor can connect to Waqt UK without an API key. Users open Waqt's directory, choose a mosque, then paste that mosque's Waqt page URL or slug into Settings (or the first-time setup flow).
 
