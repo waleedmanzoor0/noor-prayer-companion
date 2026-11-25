@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle, Bell, BellRing, Building2, CalendarDays,
   CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, LogIn, LogOut,
@@ -67,6 +67,7 @@ export default function App() {
   const [selectedMosqueId, setSelectedMosqueId] = useState("");
   const [waqtSlug, setWaqtSlug] = useState("");
   const [connectingWaqt, setConnectingWaqt] = useState(false);
+  const autoWaqtRefreshAttempt = useRef("");
   const [monthRows, setMonthRows] = useState<PrayerRow[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(() => localDateKey());
@@ -204,6 +205,19 @@ export default function App() {
   useEffect(() => {
     if (sessionEmail && prefsLoaded) void loadTimetable();
   }, [sessionEmail, selectedMosqueId, prefsLoaded]);
+
+  // Refresh a selected Waqt mosque once when Noor opens on a new UK day.
+  // The server-side shared cache still enforces Waqt's hourly request limit.
+  useEffect(() => {
+    if (!sessionEmail || !prefsLoaded || setupRequired || !selectedMosqueId) return;
+    const selected = mosques.find(item => item.id === selectedMosqueId);
+    if (!selected?.waqt_slug) return;
+    const refreshKey = selected.id + ":" + todayKey;
+    if (autoWaqtRefreshAttempt.current === refreshKey) return;
+    autoWaqtRefreshAttempt.current = refreshKey;
+    setWaqtSlug(selected.waqt_slug);
+    void connectWaqtMosque(selected.waqt_slug, true);
+  }, [sessionEmail, prefsLoaded, setupRequired, selectedMosqueId, mosques, todayKey]);
 
   useEffect(() => {
     const client = supabase;
@@ -365,9 +379,9 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
-  async function connectWaqtMosque() {
+  async function connectWaqtMosque(rawSlug = waqtSlug, silent = false) {
     const client = supabase;
-    const supplied = waqtSlug.trim();
+    const supplied = rawSlug.trim();
     if (!client || !sessionEmail) {
       setMessage("Sign in to Noor before connecting a Waqt mosque.");
       return;
@@ -377,9 +391,11 @@ export default function App() {
       return;
     }
 
-    setConnectingWaqt(true);
-    setBusy(true);
-    setMessage("");
+    if (!silent) {
+      setConnectingWaqt(true);
+      setBusy(true);
+      setMessage("");
+    }
     try {
       const { data, error } = await client.functions.invoke("waqt-timetable", {
         body: { slug: supplied },
@@ -393,6 +409,9 @@ export default function App() {
       }
       if (data?.error) throw new Error(String(data.error));
 
+      if (data?.currentForUkDate === false) {
+        throw new Error("Waqt is still serving its previous cached day. To respect its hourly limit, please try again later.");
+      }
       const payload = data?.payload as WaqtPayload | undefined;
       const mosqueData = data?.mosque as Mosque | undefined;
       if (!payload || !mosqueData?.id) {
@@ -448,12 +467,16 @@ export default function App() {
       });
 
       const importedDates = sourceRows.map(row => row.prayer_date).join(" and ");
-      setMessage("Connected to " + payload.masjid.name + ". Waqt times imported for " + importedDates + ".");
+      if (!silent) {
+        setMessage("Connected to " + payload.masjid.name + ". Waqt times imported for " + importedDates + ".");
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not connect this Waqt mosque.");
     } finally {
-      setConnectingWaqt(false);
-      setBusy(false);
+      if (!silent) {
+        setConnectingWaqt(false);
+        setBusy(false);
+      }
     }
   }
 
