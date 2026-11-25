@@ -455,13 +455,23 @@ export default function App() {
       setMosques(previous => previous.some(item => item.id === mosqueData.id)
         ? previous.map(item => item.id === mosqueData.id ? { ...item, ...mosqueData } : item)
         : [...previous, mosqueData]);
+      const importedDateKeys = sourceRows.map(row => row.prayer_date);
+      const { data: savedRows, error: savedRowsError } = await client.from("prayer_times")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("mosque_id", mosqueData.id)
+        .in("prayer_date", importedDateKeys);
+      if (savedRowsError) throw savedRowsError;
+
       setSelectedMosqueId(mosqueData.id);
       setWaqtSlug(payload.masjid.slug);
-      setMonthRows(previous => {
-        const byDate = new Map(previous.map(item => [item.prayer_date, item]));
-        rows.forEach(row => byDate.set(row.prayer_date, row as PrayerRow));
-        return [...byDate.values()].sort((a, b) => a.prayer_date.localeCompare(b.prayer_date));
-      });
+      if (savedRows?.length) {
+        setMonthRows(previous => {
+          const byDate = new Map(previous.map(item => [item.prayer_date, item]));
+          (savedRows as PrayerRow[]).forEach(row => byDate.set(row.prayer_date, row));
+          return [...byDate.values()].sort((a, b) => a.prayer_date.localeCompare(b.prayer_date));
+        });
+      }
 
       const importedDates = sourceRows.map(row => row.prayer_date).join(" and ");
       if (!silent) {
@@ -533,13 +543,21 @@ export default function App() {
         if (rows.length) {
           const { error: upsertError } = await supabase!.from("prayer_times").upsert(rows, { onConflict: "user_id,prayer_date" });
           if (upsertError) throw upsertError;
+          const { data: savedRows, error: savedRowsError } = await supabase!.from("prayer_times")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("mosque_id", mosqueId)
+            .in("prayer_date", rows.map(row => row.prayer_date));
+          if (savedRowsError) throw savedRowsError;
+          if (savedRows?.length) {
+            setMonthRows(previous => {
+              const byDate = new Map(previous.map(item => [item.prayer_date, item]));
+              (savedRows as PrayerRow[]).forEach(row => byDate.set(row.prayer_date, row));
+              return [...byDate.values()].sort((a, b) => a.prayer_date.localeCompare(b.prayer_date));
+            });
+          }
         }
         setSelectedMosqueId(mosqueId);
-        setMonthRows(previous => {
-          const byDate = new Map(previous.map(item => [item.prayer_date, item]));
-          rows.forEach(row => byDate.set(row.prayer_date, row as PrayerRow));
-          return [...byDate.values()].sort((a, b) => a.prayer_date.localeCompare(b.prayer_date));
-        });
         setMessage("Your Waqt mosque timetable has been refreshed.");
       } else {
         const days = await saveMosqueChoiceAndCopy(mosqueId);
@@ -709,7 +727,7 @@ export default function App() {
                   <input id="setup-waqt-slug" className="field" value={waqtSlug} onChange={event => setWaqtSlug(event.target.value)}
                     placeholder="https://waqt.uk/shahjalal/ or shahjalal" autoCapitalize="none" autoCorrect="off"/>
                   <p className="small-note">Open Waqt, choose your mosque, then paste its page address here. Noor fetches today's and tomorrow's published times.</p>
-                  <button className="primary-btn full" onClick={connectWaqtMosque} disabled={connectingWaqt || busy || !waqtSlug.trim()}>
+                  <button className="primary-btn full" onClick={() => void connectWaqtMosque()} disabled={connectingWaqt || busy || !waqtSlug.trim()}>
                     <RefreshCw size={15}/>{connectingWaqt ? "Connecting to Waqt…" : "Connect Waqt timetable"}
                   </button>
                   <p className="waqt-attribution-note">Times from Waqt · cached at most once an hour.</p>
