@@ -113,9 +113,19 @@ out center tags 80;`;
   };
 
   try {
-    return await Promise.any(endpoints.map(request));
-  } catch {
-    throw new Error("Nearby mosque maps are temporarily unavailable. Please try again shortly.");
+    const attempts = endpoints.map(request);
+    const firstSuccessful = new Promise<OsmElement[]>((resolve, reject) => {
+      let pending = attempts.length;
+      for (const attempt of attempts) {
+        attempt.then(resolve).catch(() => {
+          pending -= 1;
+          if (pending === 0) {
+            reject(new Error("Nearby mosque maps are temporarily unavailable. Please try again shortly."));
+          }
+        });
+      }
+    });
+    return await firstSuccessful;
   } finally {
     controllers.forEach(controller => controller.abort());
   }
