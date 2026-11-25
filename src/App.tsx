@@ -171,8 +171,11 @@ export default function App() {
             setSelectedMosqueId(data.preferred_mosque_id || "");
             setWaqtSlug(available.find(item => item.id === data.preferred_mosque_id)?.waqt_slug || "");
             setPostcode(data.postcode || "");
-            setMadhhab((data.madhhab || data.asr_school || "Hanafi") as Madhhab);
-            setAsrSchool((data.madhhab || data.asr_school) === "Hanafi" ? "Hanafi" : "Standard");
+            const savedMadhhab = ["Hanafi", "Maliki", "Shafi'i", "Hanbali"].includes(String(data.madhhab))
+              ? data.madhhab as Madhhab
+              : "Hanafi";
+            setMadhhab(savedMadhhab);
+            setAsrSchool(savedMadhhab === "Hanafi" ? "Hanafi" : "Standard");
             setNotificationsEnabled(data.notifications_enabled !== false);
             setPrefs({
               Fajr: { ...defaultPrefs.Fajr, ...(stored.Fajr || {}) },
