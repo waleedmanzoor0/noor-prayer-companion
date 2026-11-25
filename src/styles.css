@@ -208,3 +208,36 @@ button{cursor:pointer}
 .notification-switch input:checked+.notification-switch-track>span{transform:translateX(19px);background:#17251e}
 .notification-switch input:focus-visible+.notification-switch-track{outline:3px solid var(--gold2);outline-offset:3px}
 .notification-switch input:disabled+.notification-switch-track{opacity:.5;cursor:wait}
+
+
+/* Postcode-first onboarding and Masjidi mosque selection */
+.postcode-search-row{display:grid;grid-template-columns:minmax(0,1fr) 82px;gap:8px;align-items:center;margin:5px 0 10px}
+.postcode-search-row .field{min-width:0;margin:0}
+.postcode-radius{text-align:center;padding-left:7px;padding-right:19px}
+.nearby-mosque-card{display:flex;align-items:flex-start;gap:10px;padding:12px 10px;margin-top:8px;background:var(--surface2);border:1px solid var(--line);border-radius:14px}
+.nearby-mosque-card.selected{border-color:var(--gold2);background:rgba(185,154,85,.09)}
+.nearby-mosque-icon{display:grid;place-items:center;width:33px;height:33px;flex-shrink:0;border-radius:11px;background:rgba(185,154,85,.12);color:var(--gold)}
+.nearby-mosque-details{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}
+.nearby-mosque-details>strong{font-size:11px;line-height:1.4;color:var(--text);font-weight:650}
+.nearby-mosque-details>small{font-size:9px;color:var(--muted);line-height:1.4;overflow-wrap:anywhere}
+.nearby-mosque-badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px}
+.nearby-mosque-badges .timetable-status{display:inline-flex;align-items:center;border-radius:99px;padding:4px 7px;font-size:8px;line-height:1.25;font-weight:650;background:var(--surface)}
+.nearby-mosque-badges .timetable-status.available{color:#4f9b6c;background:rgba(92,170,121,.1)}
+.nearby-mosque-badges .timetable-status.missing{color:var(--muted);background:rgba(130,130,130,.09)}
+.nearby-select-btn{display:grid;place-items:center;width:32px;height:32px;flex-shrink:0;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--gold);margin-top:2px}
+.nearby-select-btn:disabled{opacity:.35;cursor:not-allowed}
+.nearby-results-footnote{font-size:8px;color:var(--muted);text-align:right;margin:9px 2px 0}
+.privacy-note{font-size:9px;line-height:1.5;margin:10px 3px 0}
+.madhhab-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:15px 0}
+.madhhab-grid button{display:flex;align-items:center;gap:10px;min-height:58px;padding:12px;border:1px solid var(--line);border-radius:13px;background:var(--surface2);color:var(--text);text-align:left}
+.madhhab-grid button.selected{border-color:var(--gold2);background:rgba(185,154,85,.1)}
+.madhhab-grid button strong{font-size:12px;font-weight:650}
+.madhhab-radio{display:grid;place-items:center;width:20px;height:20px;border:1px solid var(--line);border-radius:50%;color:var(--gold);flex-shrink:0}
+.madhhab-grid button.selected .madhhab-radio{border-color:var(--gold2)}
+.masjidi-attribution{color:var(--gold);font-size:9px;font-weight:600}
+@media(max-width:390px){
+  .postcode-search-row{grid-template-columns:minmax(0,1fr) 74px;gap:6px}
+  .nearby-mosque-card{gap:8px;padding:10px 8px}
+  .nearby-mosque-badges{gap:4px}
+  .nearby-mosque-badges .timetable-status{font-size:7px}
+}
