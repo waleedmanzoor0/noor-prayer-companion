@@ -109,11 +109,37 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (mosqueError) throw mosqueError;
 
+      const cachedTomorrowDate = cache.payload.tomorrow?.date && Array.isArray(cache.payload.tomorrow.date)
+        ? cache.payload.tomorrow.date.map((part: number) => String(part).padStart(2, "0")).join("-")
+        : null;
+      const cachedCurrentForUkDate = cache.payload.date === today || cachedTomorrowDate === today;
+      const payloadForToday = cache.payload.date === today
+        ? cache.payload
+        : cachedTomorrowDate === today
+          ? { ...cache.payload, date: today, today: cache.payload.tomorrow, tomorrow: null }
+          : cache.payload;
+
+      let mosque = existing;
+      if (!mosque && cachedCurrentForUkDate) {
+        const { data, error } = await admin.from("mosques").insert({
+          name: String(cache.payload.masjid?.name || slug),
+          city: "United Kingdom",
+          timetable_source: "Times from Waqt",
+          waqt_slug: slug,
+          waqt_url: String(cache.payload.masjid?.url || "https://waqt.uk/" + slug + "/"),
+          waqt_last_fetched_at: cache.last_fetched_at,
+          waqt_revision: Number(cache.payload.revision) || null,
+          waqt_payload: cache.payload,
+        }).select("id,name,address,city,timetable_source,waqt_slug,waqt_url").single();
+        if (error) throw error;
+        mosque = data;
+      }
+
       return Response.json({
         ok: true,
         cached: true,
-        currentForUkDate: cache.payload.date === today,
-        mosque: existing || {
+        currentForUkDate: cachedCurrentForUkDate,
+        mosque: mosque || {
           id: null,
           name: cache.payload.masjid?.name || slug,
           address: null,
@@ -122,7 +148,7 @@ Deno.serve(async (req) => {
           waqt_slug: slug,
           waqt_url: cache.payload.masjid?.url || "https://waqt.uk/" + slug + "/",
         },
-        payload: cache.payload,
+        payload: payloadForToday,
         attribution: cache.payload.attribution || { text: "Times from Waqt", url: "https://waqt.uk/" },
         cacheAgeSeconds: cache.last_fetched_at
           ? Math.max(0, Math.floor((now.getTime() - new Date(cache.last_fetched_at).getTime()) / 1000))
