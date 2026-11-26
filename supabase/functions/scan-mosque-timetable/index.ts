@@ -52,10 +52,12 @@ Deno.serve(async (req) => {
     }
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey());
-    const { data: apiKey, error: vaultError } = await admin.rpc("noor_get_vault_secret", {
-      secret_name: "gemini_api_key",
-    });
-    if (vaultError || !apiKey) {
+    let apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) {
+      const { data, error } = await admin.rpc("noor_get_vault_secret", { secret_name: "gemini_api_key" });
+      if (!error && data) apiKey = String(data);
+    }
+    if (!apiKey) {
       return errorResponse("Gemini API key was not found in Supabase Vault. Add it as gemini_api_key.", 503, headers);
     }
 
