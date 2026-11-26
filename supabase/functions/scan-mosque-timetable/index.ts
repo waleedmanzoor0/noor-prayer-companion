@@ -74,38 +74,59 @@ Rules:
 - Return JSON only, no markdown or explanatory text.`;
 
     const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": String(apiKey) },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [
-          { text: prompt },
-          { inline_data: { mime_type: mimeType, data: fileBase64 } },
-        ] }],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              days: { type: "ARRAY", items: { type: "OBJECT", properties: {
-                prayer_date: { type: "STRING" },
-                fajr: { type: "STRING", nullable: true }, sunrise: { type: "STRING", nullable: true },
-                dhuhr: { type: "STRING", nullable: true }, asr: { type: "STRING", nullable: true },
-                maghrib: { type: "STRING", nullable: true }, isha: { type: "STRING", nullable: true },
-                fajr_jamaat: { type: "STRING", nullable: true }, dhuhr_jamaat: { type: "STRING", nullable: true },
-                asr_jamaat: { type: "STRING", nullable: true }, maghrib_jamaat: { type: "STRING", nullable: true },
-                isha_jamaat: { type: "STRING", nullable: true },
-              }, required: ["prayer_date","fajr","sunrise","dhuhr","asr","maghrib","isha","fajr_jamaat","dhuhr_jamaat","asr_jamaat","maghrib_jamaat","isha_jamaat"] } },
-            }, required: ["days"],
-          },
+    const requestBody = JSON.stringify({
+      contents: [{ role: "user", parts: [
+        { text: prompt },
+        { inline_data: { mime_type: mimeType, data: fileBase64 } },
+      ] }],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            days: { type: "ARRAY", items: { type: "OBJECT", properties: {
+              prayer_date: { type: "STRING" },
+              fajr: { type: "STRING", nullable: true }, sunrise: { type: "STRING", nullable: true },
+              dhuhr: { type: "STRING", nullable: true }, asr: { type: "STRING", nullable: true },
+              maghrib: { type: "STRING", nullable: true }, isha: { type: "STRING", nullable: true },
+              fajr_jamaat: { type: "STRING", nullable: true }, dhuhr_jamaat: { type: "STRING", nullable: true },
+              asr_jamaat: { type: "STRING", nullable: true }, maghrib_jamaat: { type: "STRING", nullable: true },
+              isha_jamaat: { type: "STRING", nullable: true },
+            }, required: ["prayer_date","fajr","sunrise","dhuhr","asr","maghrib","isha","fajr_jamaat","dhuhr_jamaat","asr_jamaat","maghrib_jamaat","isha_jamaat"] } },
+          }, required: ["days"],
         },
-      }),
+      },
     });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
+
+    // Google recommends bounded exponential backoff for transient 429/5xx errors.
+    let response: Response | null = null;
+    let result: any = {};
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": String(apiKey) },
+          body: requestBody,
+        });
+      } catch (networkError) {
+        if (attempt === 2) throw networkError;
+        await new Promise(resolve => setTimeout(resolve, 700 * (2 ** attempt) + Math.random() * 500));
+        continue;
+      }
+      result = await response.json().catch(() => ({}));
+      if (response.ok) break;
+      const transient = response.status === 408 || response.status === 429 || response.status >= 500;
+      if (!transient || attempt === 2) break;
+      await new Promise(resolve => setTimeout(resolve, 700 * (2 ** attempt) + Math.random() * 500));
+    }
+    if (!response?.ok) {
+      const status = response?.status || 502;
       const reason = result?.error?.message || "Gemini could not read this document.";
-      return errorResponse(reason, response.status === 429 ? 429 : 502, headers);
+      if (status === 503) {
+        return errorResponse("Gemini is temporarily at capacity. Noor retried automatically; please wait a minute and try again.", 503, headers);
+      }
+      return errorResponse(reason, status === 429 ? 429 : status >= 500 ? 502 : status, headers);
     }
     const raw = result?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || "").join("");
     if (!raw) return errorResponse("Gemini returned no readable timetable. Try a clearer scan.", 422, headers);
