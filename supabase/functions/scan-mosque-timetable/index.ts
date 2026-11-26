@@ -73,7 +73,7 @@ Rules:
 - Do not treat sunrise as Fajr or Maghrib as Isha.
 - Return JSON only, no markdown or explanatory text.`;
 
-    const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+    const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": String(apiKey) },
