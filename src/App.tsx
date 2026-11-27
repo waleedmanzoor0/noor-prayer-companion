@@ -184,7 +184,7 @@ export default function App() {
 
   useEffect(() => {
     const client = supabase;
-    if (!client || !sessionEmail || !prefsLoaded || setupRequired || !selectedMosqueId) return;
+    if (!client || !prefsLoaded || setupRequired || !selectedMosqueId) return;
     let active = true;
     const save = async () => {
       const { data: { user } } = await client.auth.getUser();
@@ -205,7 +205,7 @@ export default function App() {
     };
     void save();
     return () => { active = false; };
-  }, [prefs, madhhab, postcode, notificationsEnabled, selectedMosqueId, prefsLoaded, setupRequired, sessionEmail]);
+  }, [prefs, madhhab, postcode, notificationsEnabled, selectedMosqueId, prefsLoaded, setupRequired]);
 
   useEffect(() => {
     if (!("Notification" in window)) {
@@ -225,7 +225,7 @@ export default function App() {
         .then(subscription => setPushState(subscription ? "Enabled on this device" : "Permission granted — not subscribed"))
         .catch(() => setPushState("Permission granted — status unavailable"));
     }
-  }, [sessionEmail]);
+  }, []);
 
   const todayKey = localDateKey(now);
   const todayRow = monthRows.find(item => item.prayer_date === todayKey) || null;
@@ -830,34 +830,6 @@ export default function App() {
     setSelectedDate(dateKey(nextMonth.getFullYear(), nextMonth.getMonth(), 1));
   }
 
-  const signedOutCard = (
-    <div className="setting-card">
-      <div className="setting-title"><LogIn/><div><strong>Account</strong><span>{sessionEmail || "Sign in to sync your mosque timetable"}</span></div></div>
-      {!hasSupabaseConfig ? <div className="notice warning"><AlertCircle size={16}/> Noor's database connection is not configured.</div> :
-        sessionEmail ? <div className="account-row"><div className="account-avatar">{sessionEmail === "Guest" ? "G" : sessionEmail.slice(0, 1).toUpperCase()}</div><div className="account-email">{sessionEmail === "Guest" ? "Guest session · saved on this device" : sessionEmail}</div></div> :
-        <>
-          <label className="field-label" htmlFor="noor-login-email">Email address</label>
-          <input id="noor-login-email" className="field" type="email" autoComplete="email" inputMode="email" value={email}
-            onChange={event => setEmail(event.target.value)} placeholder="you@example.com" disabled={otpSent || busy}/>
-          {!otpSent ? <button className="primary-btn full" onClick={signIn} disabled={busy || !email.trim()}>
-            <LogIn size={16}/>{busy ? "Sending code…" : "Send verification code"}
-          </button> : <>
-            <p className="small-note">Enter the eight-digit code sent to <strong>{email}</strong>.</p>
-            <label className="field-label" htmlFor="noor-login-code">Verification code</label>
-            <input id="noor-login-code" className="field otp-field" type="text" inputMode="numeric" pattern="[0-9]*"
-              autoComplete="one-time-code" maxLength={8} value={otp}
-              onChange={event => setOtp(event.target.value.replace(/\D/g, "").slice(0, 8))}
-              placeholder="00000000" aria-label="Eight-digit email verification code" disabled={busy}/>
-            <button className="primary-btn full" onClick={verifyEmailCode} disabled={busy || otp.length !== 8}>
-              <ShieldCheck size={16}/>{busy ? "Verifying…" : "Verify code & sign in"}
-            </button>
-            <button className="secondary-btn full" onClick={signIn} disabled={busy}><RefreshCw size={15}/> Send a new code</button>
-            <button className="text-btn full" onClick={() => { setOtpSent(false); setOtp(""); setMessage(""); }} disabled={busy}>Use a different email</button>
-          </>}
-        </>}
-    </div>
-  );
-
   return (
     <div className={dark ? "app dark" : "app light"}>
       <div className="shell">
@@ -872,15 +844,7 @@ export default function App() {
           </div>
         </header>
 
-        {!authReady ? (
-          <main className="setup-screen welcome-loading">
-            <div className="setup-brand">ن</div>
-            <div className="eyebrow">NOOR PRAYER COMPANION</div>
-            <h1>Preparing Noor.</h1>
-            <p className="muted">Your prayer companion is getting ready.</p>
-            <span className="nearby-spinner"/>
-          </main>
-        ) : !prefsLoaded ? (
+        {!prefsLoaded ? (
           <main className="setup-screen welcome-loading">
             <div className="setup-brand">ن</div>
             <div className="eyebrow">PERSONALISING YOUR PRAYER COMPANION</div>
@@ -1118,7 +1082,6 @@ export default function App() {
               </div>
 
               <div className="settings-group-label">ACCOUNT</div>
-              {signedOutCard}
 
               <div className="settings-group-label">MOSQUE TIMETABLE MANAGEMENT</div>
               <div className="setting-card import-card">
