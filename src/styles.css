@@ -257,51 +257,8 @@ button{cursor:pointer}
 .welcome-loading>.muted{font-size:11px}
 
 
-/* Smart mosque timetable scanner */
-.scanner-page{animation:noor-page-in .32s ease both}
-@keyframes noor-page-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
-.scanner-panel{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(145deg,var(--surface),color-mix(in srgb,var(--surface2) 65%,var(--surface)));box-shadow:0 12px 35px rgba(0,0,0,.10)}
-.scanner-intro{display:flex;align-items:center;gap:11px;margin-bottom:16px}
-.scanner-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:rgba(217,189,123,.12);color:var(--gold)}
-.scanner-intro>div:nth-child(2){display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
-.scanner-intro strong{font-size:13px;color:var(--text)}
-.scanner-intro span{font-size:10px;color:var(--muted)}
-.scanner-ai-tag{display:inline-flex;align-items:center;gap:4px;padding:5px 8px;border:1px solid var(--line);border-radius:99px;color:var(--gold)!important;font-size:9px!important}
-.scanner-dropzone{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding:24px 14px;border:1px dashed var(--gold2);border-radius:15px;background:rgba(185,154,85,.045);text-align:center;transition:background .2s,border-color .2s}
-.scanner-dropzone input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none}
-.scanner-file-icon{width:43px;height:43px;display:grid;place-items:center;border-radius:13px;background:var(--surface2);color:var(--gold)}
-.scanner-file-icon svg{width:21px;height:21px}
-.scanner-dropzone>strong{font-size:12px;color:var(--text);overflow-wrap:anywhere}
-.scanner-dropzone>span{font-size:9px;color:var(--muted)}
-.scanner-dropzone .secondary-btn{margin-top:5px}
-.scanner-privacy,.scanner-hint{font-size:9px;line-height:1.55;color:var(--muted);margin:10px 2px}
-.scanner-action{margin-top:12px}
-.scanner-message{display:flex;align-items:flex-start;gap:8px;padding:10px 11px;margin-top:12px;border:1px solid var(--line);border-radius:11px;font-size:10px;line-height:1.5}
-.scanner-message svg{flex-shrink:0;margin-top:1px}
-.scanner-message.error{color:#d38d7a;border-color:rgba(190,116,92,.35);background:rgba(190,116,92,.06)}
-.scanner-message.success{color:#6eb58a;border-color:rgba(92,170,121,.3);background:rgba(92,170,121,.06)}
-.scanner-review{margin-top:17px;padding-top:15px;border-top:1px solid var(--line)}
-.scanner-review-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.scanner-review-head>div{display:flex;flex-direction:column;gap:4px}
-.scanner-review-head strong{font-size:12px}
-.scanner-review-head span{font-size:9px;color:var(--muted)}
-.scanner-clear{border:0;background:var(--surface2);color:var(--muted);border-radius:9px;padding:7px}
-.scanner-table-wrap{overflow:auto;max-width:100%;border:1px solid var(--line);border-radius:12px}
-.scanner-table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:10px}
-.scanner-table th,.scanner-table td{padding:8px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);white-space:nowrap;text-align:left}
-.scanner-table th{position:sticky;top:0;background:var(--surface2);color:var(--muted);font-size:9px;font-weight:650}
-.scanner-table td:first-child,.scanner-table th:first-child{position:sticky;left:0;background:var(--surface);z-index:1}
-.scanner-table th:first-child{background:var(--surface2);z-index:2}
-.scanner-table tr:last-child td{border-bottom:0}
-.scanner-table input{width:100%;min-width:88px;padding:6px 5px;border:1px solid var(--line);border-radius:7px;background:var(--surface2);color:var(--text);font:inherit;color-scheme:dark}
-.scanner-table td:first-child input{min-width:128px}
-.scanner-review-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:13px}
-.scanner-review-footer>span{display:flex;align-items:center;gap:5px;color:#6eb58a;font-size:9px}
-.scanner-review-footer .primary-btn{white-space:nowrap}
-.spin{animation:noor-spin .8s linear infinite}
 .bottom-nav button{transition:color .18s,transform .18s}
 .bottom-nav button:active,.shortcut-card:active,.primary-btn:active,.secondary-btn:active{transform:scale(.98)}
 .setting-card,.shortcut-card,.hero-card-premium,.calendar-card{transition:border-color .2s,box-shadow .2s,transform .2s}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--gold2);outline-offset:3px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
-@media(max-width:480px){.scanner-panel{padding:13px}.scanner-review-footer{align-items:flex-start;flex-direction:column}.scanner-review-footer .primary-btn{width:100%}}
