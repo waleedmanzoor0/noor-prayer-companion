@@ -73,7 +73,6 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return jsonError("Use POST.", 405);
 
   try {
-    await requireUser(req);
     const body = await req.json();
     const postcode = cleanText(body.postcode, 16).toUpperCase().replace(/\s+/g, " ").trim();
     const radiusMiles = Math.min(15, Math.max(1, Number(body.radiusMiles) || 5));
