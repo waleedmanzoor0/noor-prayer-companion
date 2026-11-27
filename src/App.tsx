@@ -404,18 +404,42 @@ export default function App() {
   }
 
   async function testNotification() {
-    if (!supabase) return;
     if (!notificationsEnabled) {
       setMessage("Prayer notifications are paused. Turn them back on before sending a test.");
       return;
     }
+    if (!("Notification" in window)) {
+      setMessage("This browser does not support notifications.");
+      return;
+    }
     setBusy(true);
     try {
-      const { error } = await supabase.functions.invoke("test-notification");
-      if (error) throw error;
-      setMessage("Test notification sent. Check this device.");
+      let permission = Notification.permission;
+      if (permission === "default") permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        throw new Error(permission === "denied"
+          ? "Notifications are blocked by your browser. Allow them in site settings and try again."
+          : "Notification permission was not granted.");
+      }
+
+      const registration = "serviceWorker" in navigator
+        ? await navigator.serviceWorker.ready
+        : null;
+      const options: NotificationOptions = {
+        body: "Your Noor notification display is working on this device.",
+        icon: "/noor-prayer-companion/icons/icon-192.png",
+        badge: "/noor-prayer-companion/icons/icon-192.png",
+        tag: "noor-test",
+        data: { url: "/noor-prayer-companion/" },
+      };
+      if (registration) {
+        await registration.showNotification("Noor — Test notification", options);
+      } else {
+        new Notification("Noor — Test notification", options);
+      }
+      setMessage("Test notification displayed on this device.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not send a test notification.");
+      setMessage(error instanceof Error ? error.message : "Could not display a test notification.");
     } finally { setBusy(false); }
   }
 
@@ -1068,7 +1092,7 @@ export default function App() {
                   disabled={busy || !notificationsEnabled || pushState.startsWith("Enabled")}>
                   <BellRing size={16}/>{!notificationsEnabled ? "Turn on prayer notifications first" : pushState.startsWith("Enabled") ? "This device is enabled" : "Enable on this device"}
                 </button>
-                <button className="secondary-btn full" onClick={testNotification} disabled={busy || !sessionEmail || !notificationsEnabled}>
+                <button className="secondary-btn full" onClick={testNotification} disabled={busy || !notificationsEnabled}>
                   Send test notification
                 </button>
               </div>
