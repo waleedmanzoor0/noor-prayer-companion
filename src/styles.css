@@ -262,3 +262,10 @@ button{cursor:pointer}
 .setting-card,.shortcut-card,.hero-card-premium,.calendar-card{transition:border-color .2s,box-shadow .2s,transform .2s}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--gold2);outline-offset:3px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+/* Current prayer status on Home */
+.current-prayer-strip{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 12px;margin:10px 0 16px;padding:11px 13px;border:1px solid rgba(222,196,135,.22);border-radius:13px;background:rgba(255,255,255,.045)}
+.current-prayer-label{grid-column:1/-1;color:rgba(245,229,190,.72);font-size:9px;font-weight:750;letter-spacing:1.45px}
+.current-prayer-strip strong{font-size:16px;font-weight:700;color:var(--text)}
+.current-prayer-strip>span:last-child{font-size:10px;color:var(--muted);text-align:right}
+@media(max-width:380px){.current-prayer-strip{grid-template-columns:1fr}.current-prayer-strip>span:last-child{text-align:left}}
