@@ -569,10 +569,11 @@ export default function App() {
     month: number,
     silent = false,
   ) {
-
+    const client = supabase;
+    if (!client) throw new Error("Noor's database connection is not configured.");
     if (!silent) setMasjidiSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("masjidi-timetable", {
+      const { data, error } = await client.functions.invoke("masjidi-timetable", {
         body: { mosqueId, masjidiId, year, month },
       });
       if (error) {
