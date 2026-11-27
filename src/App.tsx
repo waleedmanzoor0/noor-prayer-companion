@@ -1084,19 +1084,7 @@ export default function App() {
 
               <div className="settings-group-label">ACCOUNT</div>
 
-              <div className="settings-group-label">MOSQUE TIMETABLE MANAGEMENT</div>
-              <div className="setting-card import-card">
-                <button className="disclosure-button" onClick={() => setShowImportTools(value => !value)}>
-                  <span><Upload size={18}/><span><strong>Manage timetable data</strong><small>Import an official monthly CSV timetable</small></span></span>
-                  <ChevronRight className={showImportTools ? "rotated" : ""} size={18}/>
-                </button>
-                {showImportTools && <div className="import-tools">
-                  <p className="small-note">CSV columns: date, fajr, sunrise, dhuhr, asr, maghrib, isha, fajr_jamaat, dhuhr_jamaat, asr_jamaat, isha_jamaat, source. Use YYYY-MM-DD dates and 24-hour HH:MM times.</p>
-                  <textarea className="csv-area" value={csvText} onChange={event => setCsvText(event.target.value)}
-                    placeholder={"date,fajr,sunrise,dhuhr,asr,maghrib,isha,fajr_jamaat,dhuhr_jamaat,asr_jamaat,maghrib_jamaat,isha_jamaat,source\n2026-12-01,05:50,08:00,11:55,14:00,15:45,17:50,06:45,13:30,14:30,19:00,Official mosque timetable"}/>
-                  <button className="primary-btn full" onClick={importCsv} disabled={busy || !csvText.trim() || !supabase}><Upload size={16}/> Import timetable</button>
-                </div>}
-              </div>
+
             </section>}
           </main>
         )}
