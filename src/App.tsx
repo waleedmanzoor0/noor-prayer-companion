@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import TimetableScanner, { type ScannedTimetableDay } from "./TimetableScanner";
 import {
   AlertCircle, Bell, BellRing, Building2, CalendarDays,
   CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, LogIn, LogOut,
-  MapPin, Moon, RefreshCw, Settings, ShieldCheck, Smartphone, Sun, Upload, X, ScanLine
+  MapPin, Moon, RefreshCw, Settings, ShieldCheck, Smartphone, Sun, Upload, X
 } from "lucide-react";
 import { supabase, hasSupabaseConfig } from "./lib/supabase";
 import { countdown, formatClock, hijriDate, localDateKey, prayerDateTime } from "./lib/date";
@@ -43,7 +42,7 @@ type NearbyMasjid = {
   jamaatTimesAvailable: boolean; lastUpdated: string | null; dbSupported: boolean;
 };
 type Madhhab = "Hanafi" | "Maliki" | "Shafi'i" | "Hanbali";
-type Tab = "home" | "timetable" | "scanner" | "settings";
+type Tab = "home" | "timetable" | "settings";
 
 function dateKey(year: number, month: number, day: number) {
   return year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
@@ -902,18 +901,6 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
-  async function importScannedTimetable(days: ScannedTimetableDay[]) {
-    if (!supabase || !sessionEmail) throw new Error("Sign in before importing a timetable.");
-    if (!selectedMosqueId) throw new Error("Choose a mosque before importing its timetable.");
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) throw userError || new Error("Please sign in again.");
-    const rows = days.map(day => ({ ...day, user_id: user.id, mosque_id: selectedMosqueId }));
-    const { error } = await supabase.from("prayer_times").upsert(rows, { onConflict: "user_id,prayer_date" });
-    if (error) throw error;
-    await loadTimetable();
-    setMessage("Imported " + days.length + " reviewed timetable day(s) for " + (mosque?.name || "your mosque") + ".");
-  }
-
   function changeMonth(offset: number) {
     const nextMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + offset, 1);
     setMonthCursor(nextMonth);
@@ -1171,13 +1158,6 @@ export default function App() {
               {loadingRows && <div className="status-line"><span className="status-dot"/> Updating timetable…</div>}
             </section>}
 
-            {tab === "scanner" && <section className="page-section scanner-page">
-              <div className="eyebrow">GEMINI-POWERED TOOL</div>
-              <h1>Timetable scanner</h1>
-              <p className="muted">Turn a mosque's printed timetable into editable prayer times. Nothing is saved until you review and import it.</p>
-              <TimetableScanner mosqueName={mosque?.name || ""} onImport={importScannedTimetable}/>
-            </section>}
-
             {tab === "settings" && <section className="page-section settings-page">
               <div className="eyebrow">PERSONALISE NOOR</div><h1>Settings</h1>
               <p className="muted">Everything you need to make Noor feel right for you.</p>
@@ -1282,7 +1262,6 @@ export default function App() {
         {sessionEmail && prefsLoaded && !setupRequired && <nav className="bottom-nav">
           <button className={tab === "home" ? "selected" : ""} onClick={() => setTab("home")}><Moon/><span>Home</span></button>
           <button className={tab === "timetable" ? "selected" : ""} onClick={() => setTab("timetable")}><CalendarDays/><span>Timetable</span></button>
-          <button className={tab === "scanner" ? "selected" : ""} onClick={() => setTab("scanner")}><ScanLine/><span>Scanner</span></button>
           <button className={tab === "settings" ? "selected" : ""} onClick={() => setTab("settings")}><Settings/><span>Settings</span></button>
         </nav>}
         <footer className="footer-note">Made with intention <span>✦</span> Noor Prayer Companion</footer>
