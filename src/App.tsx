@@ -1011,7 +1011,6 @@ export default function App() {
             <div className="setup-brand">ن</div>
             <div className="eyebrow">NOOR PRAYER COMPANION</div>
             <h1>Preparing Noor.</h1>
-            <p className="muted">Starting your private guest session — no account or sign-up needed.</p>
             <span className="nearby-spinner"/>
           </main>
         ) : !prefsLoaded ? (
