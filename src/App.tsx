@@ -133,12 +133,27 @@ export default function App() {
       setAuthReady(true);
       return;
     }
-    supabase.auth.getSession().then(({ data }) => {
-      setSessionEmail(data.session?.user.email ?? null);
-      setAuthReady(true);
-    }).catch(() => setAuthReady(true));
+    let mounted = true;
+    supabase.auth.getSession().then(async ({ data, error }) => {
+      if (error) throw error;
+      if (data.session) {
+        if (mounted) setSessionEmail(data.session.user.email ?? "Guest");
+      } else {
+        // Create a private Supabase anonymous session so first-time visitors can
+        // use mosque preferences and push notifications without registering.
+        const { data: guestData, error: guestError } = await supabase.auth.signInAnonymously();
+        if (guestError) throw guestError;
+        if (mounted) setSessionEmail(guestData.user?.email ?? "Guest");
+      }
+      if (mounted) setAuthReady(true);
+    }).catch(error => {
+      if (mounted) {
+        setMessage(error instanceof Error ? error.message : "Could not start a guest session. Please refresh Noor.");
+        setAuthReady(true);
+      }
+    });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSessionEmail(session?.user.email ?? null);
+      setSessionEmail(session ? (session.user.email ?? "Guest") : null);
       setAuthReady(true);
       if (session) {
         setOtpSent(false);
@@ -150,7 +165,7 @@ export default function App() {
         setMonthRows([]);
       }
     });
-    return () => listener.subscription.unsubscribe();
+    return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -924,7 +939,7 @@ export default function App() {
     <div className="setting-card">
       <div className="setting-title"><LogIn/><div><strong>Account</strong><span>{sessionEmail || "Sign in to sync your mosque timetable"}</span></div></div>
       {!hasSupabaseConfig ? <div className="notice warning"><AlertCircle size={16}/> Noor's database connection is not configured.</div> :
-        sessionEmail ? <div className="account-row"><div className="account-avatar">{sessionEmail.slice(0, 1).toUpperCase()}</div><div className="account-email">{sessionEmail}</div><button className="secondary-btn" onClick={signOut}><LogOut size={15}/> Sign out</button></div> :
+        sessionEmail ? <div className="account-row"><div className="account-avatar">{sessionEmail === "Guest" ? "G" : sessionEmail.slice(0, 1).toUpperCase()}</div><div className="account-email">{sessionEmail === "Guest" ? "Guest session · saved on this device" : sessionEmail}</div></div> :
         <>
           <label className="field-label" htmlFor="noor-login-email">Email address</label>
           <input id="noor-login-email" className="field" type="email" autoComplete="email" inputMode="email" value={email}
@@ -982,7 +997,7 @@ export default function App() {
               <div><Bell size={16}/><span>Choose the reminders that suit you</span></div>
             </div>
             {signedOutCard}
-            <p className="setup-footnote">Your details and preferences stay linked to your Noor account.</p>
+            <p className="setup-footnote">No sign-up needed. Noor starts a private guest session and saves your preferences on this device.</p>
           </main>
         ) : !prefsLoaded ? (
           <main className="setup-screen welcome-loading">
