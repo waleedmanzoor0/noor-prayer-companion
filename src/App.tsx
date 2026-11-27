@@ -130,55 +130,63 @@ export default function App() {
 
   useEffect(() => {
     const client = supabase;
+    let mounted = true;
     if (!client) {
-      setMessage("Noor could not connect to its database. Please refresh the page.");
+      setMessage("Noor could not connect to Supabase. Check the deployment environment settings.");
       setAuthReady(true);
       return;
     }
 
-    let mounted = true;
-    let guestSignInStarted = false;
-    const startGuestSession = () => {
-      if (guestSignInStarted) return;
-      guestSignInStarted = true;
-      // Start outside the Supabase auth callback to avoid locking auth state
-      // while signInAnonymously emits its SIGNED_IN event.
-      window.setTimeout(() => {
-        void client.auth.signInAnonymously().then(({ data, error }) => {
-          if (!mounted) return;
-          if (error) throw error;
-          if (!data.user) throw new Error("Supabase did not return a guest user.");
-          setSessionEmail(data.user.email ?? "Guest");
-          setAuthReady(true);
-        }).catch(error => {
-          if (!mounted) return;
-          setMessage(error instanceof Error ? error.message : "Could not start a guest session. Please refresh Noor.");
-          setAuthReady(true);
-        });
-      }, 0);
-    };
-
-    const { data: listener } = client.auth.onAuthStateChange((event, session) => {
-      if (!mounted) return;
-      if (session) {
-        setSessionEmail(session.user.email ?? "Guest");
-        setOtpSent(false);
-        setOtp("");
+    const timeout = window.setTimeout(() => {
+      if (mounted) {
+        setMessage("Noor is taking longer than expected to connect. Please check your connection and try again.");
         setAuthReady(true);
-      } else if (event === "INITIAL_SESSION") {
-        startGuestSession();
-      } else if (event === "SIGNED_OUT") {
-        setSessionEmail(null);
-        setPrefsLoaded(false);
-        setSetupRequired(false);
-        setSelectedMosqueId("");
-        setMonthRows([]);
-        startGuestSession();
       }
+    }, 15000);
+
+    // Keep auth callbacks synchronous. Supabase can deadlock if another auth
+    // method is awaited from inside onAuthStateChange.
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
+      if (!mounted || !session) return;
+      setSessionEmail(session.user.email ?? "Guest");
+      setOtpSent(false);
+      setOtp("");
+      setAuthReady(true);
+      window.clearTimeout(timeout);
     });
 
+    const bootstrap = async () => {
+      try {
+        const { data, error } = await client.auth.getSession();
+        if (error) throw error;
+        if (!mounted) return;
+
+        if (data.session) {
+          setSessionEmail(data.session.user.email ?? "Guest");
+          setAuthReady(true);
+          window.clearTimeout(timeout);
+          return;
+        }
+
+        const { data: guestData, error: guestError } = await client.auth.signInAnonymously();
+        if (guestError) throw guestError;
+        if (!mounted) return;
+        if (!guestData.user) throw new Error("Supabase did not return a guest session.");
+        setSessionEmail(guestData.user.email ?? "Guest");
+        setAuthReady(true);
+        window.clearTimeout(timeout);
+      } catch (error) {
+        if (!mounted) return;
+        setMessage(error instanceof Error ? error.message : "Could not start Noor. Please try again.");
+        setAuthReady(true);
+        window.clearTimeout(timeout);
+      }
+    };
+
+    void bootstrap();
     return () => {
       mounted = false;
+      window.clearTimeout(timeout);
       listener.subscription.unsubscribe();
     };
   }, []);
@@ -1010,8 +1018,9 @@ export default function App() {
           <main className="setup-screen welcome-loading">
             <div className="setup-brand">ن</div>
             <div className="eyebrow">NOOR PRAYER COMPANION</div>
-            <h1>Preparing Noor.</h1>
-            <span className="nearby-spinner"/>
+            <h1>Let's get Noor ready.</h1>
+            <p className="muted">{message || "We couldn't start your guest session."}</p>
+            <button className="primary-btn" onClick={() => window.location.reload()}>Try again</button>
           </main>
         ) : !prefsLoaded ? (
           <main className="setup-screen welcome-loading">
