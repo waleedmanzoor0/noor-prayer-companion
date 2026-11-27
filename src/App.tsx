@@ -133,15 +133,16 @@ export default function App() {
       setAuthReady(true);
       return;
     }
+    const client = supabase;
     let mounted = true;
-    supabase.auth.getSession().then(async ({ data, error }) => {
+    client.auth.getSession().then(async ({ data, error }) => {
       if (error) throw error;
       if (data.session) {
         if (mounted) setSessionEmail(data.session.user.email ?? "Guest");
       } else {
         // Create a private Supabase anonymous session so first-time visitors can
         // use mosque preferences and push notifications without registering.
-        const { data: guestData, error: guestError } = await supabase.auth.signInAnonymously();
+        const { data: guestData, error: guestError } = await client.auth.signInAnonymously();
         if (guestError) throw guestError;
         if (mounted) setSessionEmail(guestData.user?.email ?? "Guest");
       }
@@ -152,7 +153,7 @@ export default function App() {
         setAuthReady(true);
       }
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
       setSessionEmail(session ? (session.user.email ?? "Guest") : null);
       setAuthReady(true);
       if (session) {
