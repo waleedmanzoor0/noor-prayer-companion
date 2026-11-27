@@ -1110,10 +1110,6 @@ export default function App() {
                 </div>
               </div>}
 
-              <section className="home-shortcuts">
-                <button className="shortcut-card" onClick={() => setTab("timetable")}><CalendarDays/><span><strong>Monthly timetable</strong><small>Browse dates and Jamaat times</small></span><ChevronRight size={16}/></button>
-                <button className="shortcut-card" onClick={() => setTab("settings")}><Bell/><span><strong>Prayer reminders</strong><small>{notificationsEnabled ? "Manage your alerts" : "Reminders are paused"}</small></span><ChevronRight size={16}/></button>
-              </section>
             </>}
 
             {tab === "timetable" && <section className="page-section timetable-page">
