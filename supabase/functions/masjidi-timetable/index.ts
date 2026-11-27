@@ -57,7 +57,7 @@ function apiDate(value: any): string | null {
   const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
   return match?.[1] || null;
 }
-function normalizeDay(day: any, userId: string, mosqueId: string) {
+function normalizeDay(day: any, mosqueId: string) {
   const date = apiDate(day?.date);
   const fajr = time24(day?.fajr_start_time);
   const sunrise = time24(day?.shuruq);
@@ -68,7 +68,6 @@ function normalizeDay(day: any, userId: string, mosqueId: string) {
   if (!date || !fajr || !dhuhr || !asr || !maghrib || !isha) return null;
 
   return {
-    user_id: userId,
     mosque_id: mosqueId,
     prayer_date: date,
     fajr,
@@ -98,7 +97,6 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return jsonError("Use POST.", 405);
 
   try {
-    const user = await requireUser(req);
     const body = await req.json();
     const mosqueId = String(body.mosqueId || "");
     const masjidiId = String(body.masjidiId || "");
@@ -194,7 +192,7 @@ Deno.serve(async (req) => {
 
     const daysInMonth = new Date(year, month, 0).getDate();
     const rows = (Array.isArray(payload) ? payload : [])
-      .map((day: any) => normalizeDay(day, user.id, mosqueId))
+      .map((day: any) => normalizeDay(day, mosqueId))
       .filter((row: any) => row && row.prayer_date >= String(year) + "-" + String(month).padStart(2, "0") + "-01" &&
         row.prayer_date <= String(year) + "-" + String(month).padStart(2, "0") + "-" + String(daysInMonth).padStart(2, "0"));
 
@@ -207,9 +205,7 @@ Deno.serve(async (req) => {
       return jsonError(message, 404);
     }
 
-    const { error: upsertError } = await admin.from("prayer_times")
-      .upsert(rows, { onConflict: "user_id,prayer_date" });
-    if (upsertError) throw upsertError;
+
 
     const jamaatDays = rows.filter((row: any) =>
       row.fajr_jamaat || row.dhuhr_jamaat || row.asr_jamaat || row.maghrib_jamaat || row.isha_jamaat
@@ -230,7 +226,7 @@ Deno.serve(async (req) => {
       cached,
       daysImported: rows.length,
       jamaatDays,
-      rows: rows.map((row: any) => ({ prayer_date: row.prayer_date })),
+      rows,
       source: "Times from Masjidi",
     }, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
