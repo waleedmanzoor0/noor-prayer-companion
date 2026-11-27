@@ -153,18 +153,21 @@ export default function App() {
         setAuthReady(true);
       }
     });
-    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
-      setSessionEmail(session ? (session.user.email ?? "Guest") : null);
-      setAuthReady(true);
+    const { data: listener } = client.auth.onAuthStateChange((event, session) => {
+      // Ignore a null INITIAL_SESSION event: getSession() may already have
+      // created the anonymous guest session while this listener was attaching.
       if (session) {
+        setSessionEmail(session.user.email ?? "Guest");
         setOtpSent(false);
         setOtp("");
-      } else {
+      } else if (event === "SIGNED_OUT") {
+        setSessionEmail(null);
         setPrefsLoaded(false);
         setSetupRequired(false);
         setSelectedMosqueId("");
         setMonthRows([]);
       }
+      setAuthReady(true);
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, []);
@@ -754,7 +757,13 @@ export default function App() {
             masjidi_id: item.masjidiId, masjidi_supported: true,
             masjidi_db_supported: item.dbSupported, timetable_source: "Times from Masjidi",
           }]);
-      setMessage(item.name + " selected. Noor has imported its published monthly timetable.");
+      if (persistSelection) {
+        setPrefsLoaded(true);
+        setSetupRequired(false);
+        setSetupStep(0);
+        setTab("home");
+      }
+      setMessage(item.name + " selected. Your prayer times are ready.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not select this mosque.");
     } finally {
@@ -987,18 +996,12 @@ export default function App() {
             <span className="nearby-spinner"/>
           </main>
         ) : !sessionEmail ? (
-          <main className="setup-screen welcome-auth-screen">
+          <main className="setup-screen welcome-loading">
             <div className="setup-brand">ن</div>
-            <div className="eyebrow">A CALMER WAY TO STAY CONNECTED</div>
-            <h1>Welcome to Noor<span className="gold">.</span></h1>
-            <p className="muted">Your local prayer times, mosque timetable and gentle reminders — thoughtfully brought together.</p>
-            <div className="welcome-auth-features">
-              <div><MapPin size={16}/><span>Find nearby mosques using your postcode</span></div>
-              <div><Moon size={16}/><span>Personalise your madhhab and prayer preferences</span></div>
-              <div><Bell size={16}/><span>Choose the reminders that suit you</span></div>
-            </div>
-            {signedOutCard}
-            <p className="setup-footnote">No sign-up needed. Noor starts a private guest session and saves your preferences on this device.</p>
+            <div className="eyebrow">NOOR PRAYER COMPANION</div>
+            <h1>Preparing Noor.</h1>
+            <p className="muted">Starting your private guest session — no account or sign-up needed.</p>
+            <span className="nearby-spinner"/>
           </main>
         ) : !prefsLoaded ? (
           <main className="setup-screen welcome-loading">
@@ -1014,11 +1017,9 @@ export default function App() {
             <div className="eyebrow">WELCOME TO NOOR</div>
             <h1>Let's make it yours.</h1>
             <p className="muted">A few quick choices will prepare your daily prayer companion.</p>
-            <div className="setup-progress">
-              {[0, 1, 2].map(step => <span key={step} className={step <= setupStep ? "active" : ""}/>)}
-            </div>
+            <div className="setup-progress"><span className="active"/></div>
             <div className="setup-card">
-              <div className="setup-step-label">STEP {setupStep + 1} OF 3</div>
+              <div className="setup-step-label">CHOOSE YOUR LOCAL MOSQUE</div>
               {setupStep === 0 && <>
                 <div className="setup-icon"><MapPin size={23}/></div>
                 <h2>Find your local mosque</h2>
@@ -1036,41 +1037,12 @@ export default function App() {
                   <MapPin size={16}/>{searchingMosques ? "Finding nearby mosques…" : "Find nearby mosques"}
                 </button>
                 {mosque && <div className="mosque-choice"><MapPin size={16}/><div><strong>{mosque.name}</strong><span>{mosque.address || mosque.city}</span></div><CheckCircle2 size={18}/></div>}
-                {nearbyResultsOpen && <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, false)}/>}
+                {nearbyResultsOpen && <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, true)}/ >}
                 <p className="small-note privacy-note">Your postcode is used to find nearby mosques and saved to your Noor profile. Noor does not request GPS location.</p>
               </>}
-              {setupStep === 1 && <>
-                <div className="setup-icon"><Moon size={23}/></div>
-                <h2>Choose your madhhab</h2>
-                <p className="muted">Select the school of thought you follow. You can change this anytime in Settings.</p>
-                <div className="madhhab-grid">
-                  {(["Hanafi", "Maliki", "Shafi'i", "Hanbali"] as Madhhab[]).map(option => (
-                    <button key={option} className={madhhab === option ? "selected" : ""} onClick={() => setMadhhab(option)}>
-                      <span className="madhhab-radio">{madhhab === option && <CheckCircle2 size={16}/>}</span>
-                      <strong>{option}</strong>
-                    </button>
-                  ))}
-                </div>
-                <p className="small-note">Your mosque's published timetable stays authoritative. Noor saves your madhhab preference separately and will not silently alter mosque-provided times.</p>
-              </>}
-              {setupStep === 2 && <>
-                <div className="setup-icon"><BellRing size={23}/></div>
-                <h2>Stay in the moment</h2>
-                <p className="muted">Allow notifications so Noor can remind you when each prayer begins.</p>
-                <div className="notification-explainer"><Smartphone size={20}/><div><strong>Prayer reminders on this device</strong><span>You can change these settings at any time.</span></div></div>
-                <button className="secondary-btn full" onClick={enablePush} disabled={busy}><Bell size={16}/> {pushState.startsWith("Enabled") ? "Notifications enabled" : "Enable notifications"}</button>
-                <button className="text-btn full" onClick={() => setNotificationsEnabled(false)}>I'll do this later</button>
-              </>}
-              <div className="setup-actions">
-                {setupStep > 0 && <button className="secondary-btn" onClick={() => setSetupStep(step => step - 1)} disabled={busy}>Back</button>}
-                {setupStep < 2 ? <button className="primary-btn" onClick={() => {
-                  if (setupStep === 0 && (!postcode.trim() || !selectedMosqueId)) { setMessage("Enter your postcode, search nearby mosques and choose one to continue."); return; }
-                  setSetupStep(step => step + 1);
-                }}>Continue <ChevronRight size={16}/></button> :
-                  <button className="primary-btn" onClick={finishSetup} disabled={busy || !selectedMosqueId}>{busy ? "Setting up Noor…" : "Finish setup"} <CheckCircle2 size={16}/></button>}
-              </div>
+              <p className="small-note">Choose a mosque with published prayer times. Noor will then open your Home screen automatically.</p>
             </div>
-            <p className="setup-footnote">You can update your mosque and preferences in Settings whenever you need.</p>
+            <p className="setup-footnote">You can change your mosque and notification preferences later in Settings.</p>
           </main>
         ) : (
           <main>
