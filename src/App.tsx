@@ -1015,8 +1015,8 @@ export default function App() {
           <main className="setup-screen">
             <div className="setup-brand">ن</div>
             <div className="eyebrow">WELCOME TO NOOR</div>
-            <h1>Let's make it yours.</h1>
-            <p className="muted">A few quick choices will prepare your daily prayer companion.</p>
+            <h1>Find your local mosque<span className="gold">.</span></h1>
+            <p className="muted">Enter your postcode, choose a nearby mosque and your prayer times will appear on Home. No sign-up needed.</p>
             <div className="setup-progress"><span className="active"/></div>
             <div className="setup-card">
               <div className="setup-step-label">CHOOSE YOUR LOCAL MOSQUE</div>
@@ -1037,7 +1037,7 @@ export default function App() {
                   <MapPin size={16}/>{searchingMosques ? "Finding nearby mosques…" : "Find nearby mosques"}
                 </button>
                 {mosque && <div className="mosque-choice"><MapPin size={16}/><div><strong>{mosque.name}</strong><span>{mosque.address || mosque.city}</span></div><CheckCircle2 size={18}/></div>}
-                {nearbyResultsOpen && <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, true)}/ >}
+                {nearbyResultsOpen && <NearbyMasjidResults items={nearbyMosques} selectedId={selectedMosqueId} disabled={busy || masjidiSyncing} onSelect={item => void selectNearbyMasjid(item, true)}/>}
                 <p className="small-note privacy-note">Your postcode is used to find nearby mosques and saved to your Noor profile. Noor does not request GPS location.</p>
               </>}
               <p className="small-note">Choose a mosque with published prayer times. Noor will then open your Home screen automatically.</p>
