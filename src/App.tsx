@@ -208,10 +208,6 @@ export default function App() {
   }, [prefs, madhhab, postcode, notificationsEnabled, selectedMosqueId, prefsLoaded, setupRequired, sessionEmail]);
 
   useEffect(() => {
-    if (!sessionEmail) {
-      setPushState("Not signed in");
-      return;
-    }
     if (!("Notification" in window)) {
       setPushState("Not supported in this browser");
       return;
@@ -343,10 +339,7 @@ export default function App() {
   }
 
   async function enablePush() {
-    if (!supabase || !sessionEmail) {
-      setMessage("Sign in to Noor before enabling notifications.");
-      return;
-    }
+    if (!supabase) { setMessage("Noor notification setup is unavailable."); return; }
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
       setMessage("Push notifications are not supported here. On iPhone, add Noor to your Home Screen and open it there.");
       return;
@@ -378,7 +371,7 @@ export default function App() {
     const previous = notificationsEnabled;
     setNotificationsEnabled(enabled);
 
-    if (!supabase || !sessionEmail || !prefsLoaded || setupRequired) return;
+    if (!supabase || !prefsLoaded || setupRequired) return;
 
     setSavingNotificationSetting(true);
     try {
@@ -411,7 +404,7 @@ export default function App() {
   }
 
   async function testNotification() {
-    if (!supabase || !sessionEmail) return;
+    if (!supabase) return;
     if (!notificationsEnabled) {
       setMessage("Prayer notifications are paused. Turn them back on before sending a test.");
       return;
@@ -531,6 +524,8 @@ export default function App() {
     }
   }
 
+  async function discoverNearbyMosques() {
+    if (!supabase) { setMessage("Noor's database connection is not configured."); return; }
     const value = postcode.trim().toUpperCase();
     if (!value) {
       setMessage("Enter your UK postcode to find nearby mosques.");
@@ -633,6 +628,8 @@ export default function App() {
       }
 
       setSelectedMosqueId(item.mosqueId);
+      localStorage.setItem("noor-mosque-id", item.mosqueId);
+      localStorage.setItem("noor-postcode", postcode.trim().toUpperCase());
       setNearbyResultsOpen(false);
       setMonthCursor(new Date(year, month - 1, 1));
       setSelectedDate(localDateKey());
@@ -647,12 +644,10 @@ export default function App() {
             masjidi_id: item.masjidiId, masjidi_supported: true,
             masjidi_db_supported: item.dbSupported, timetable_source: "Times from Masjidi",
           }]);
-      if (persistSelection) {
-        setPrefsLoaded(true);
-        setSetupRequired(false);
-        setSetupStep(0);
-        setTab("home");
-      }
+      setPrefsLoaded(true);
+      setSetupRequired(false);
+      setSetupStep(0);
+      setTab("home");
       setMessage(item.name + " selected. Your prayer times are ready.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not select this mosque.");
@@ -884,14 +879,6 @@ export default function App() {
             <h1>Preparing Noor.</h1>
             <p className="muted">Your prayer companion is getting ready.</p>
             <span className="nearby-spinner"/>
-          </main>
-        ) : !sessionEmail ? (
-          <main className="setup-screen welcome-loading">
-            <div className="setup-brand">ن</div>
-            <div className="eyebrow">NOOR PRAYER COMPANION</div>
-            <h1>Let's get Noor ready.</h1>
-            <p className="muted">{message || "We couldn't start your guest session."}</p>
-            <button className="primary-btn" onClick={() => window.location.reload()}>Try again</button>
           </main>
         ) : !prefsLoaded ? (
           <main className="setup-screen welcome-loading">
@@ -1152,7 +1139,7 @@ export default function App() {
 
         {message && <div className="toast" role="status"><AlertCircle size={16}/><span>{message}</span><button onClick={() => setMessage("")}><X size={15}/></button></div>}
 
-        {sessionEmail && prefsLoaded && !setupRequired && <nav className="bottom-nav">
+        {prefsLoaded && !setupRequired && <nav className="bottom-nav">
           <button className={tab === "home" ? "selected" : ""} onClick={() => setTab("home")}><Moon/><span>Home</span></button>
           <button className={tab === "timetable" ? "selected" : ""} onClick={() => setTab("timetable")}><CalendarDays/><span>Timetable</span></button>
           <button className={tab === "settings" ? "selected" : ""} onClick={() => setTab("settings")}><Settings/><span>Settings</span></button>
