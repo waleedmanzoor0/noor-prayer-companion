@@ -307,6 +307,19 @@ export default function App() {
     return null;
   }, [monthRows, now, todayKey]);
   const remaining = next ? countdown(next.at, now) : null;
+  const currentPrayer = useMemo(() => {
+    let latest: (ReturnType<typeof toPrayers>[number] & { at: Date; date: string }) | null = null;
+    for (const day of monthRows) {
+      if (day.prayer_date > todayKey) continue;
+      for (const prayer of toPrayers(day)) {
+        const at = prayerDateTime(day.prayer_date, prayer.time);
+        if (at.getTime() <= now.getTime() && (!latest || at.getTime() > latest.at.getTime())) {
+          latest = { ...prayer, at, date: day.prayer_date };
+        }
+      }
+    }
+    return latest;
+  }, [monthRows, now, todayKey]);
   const dateLabel = new Intl.DateTimeFormat("en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London"
   }).format(now);
@@ -1055,7 +1068,13 @@ export default function App() {
 
               <section className="hero-card hero-card-premium">
                 <div className="hero-pattern"></div>
-                <div className="hero-top"><span className="eyebrow pale">NEXT PRAYER</span><span className="live-dot">● LIVE</span></div>
+                <div className="hero-top"><span className="eyebrow pale">PRAYER STATUS</span><span className="live-dot">● LIVE</span></div>
+                <div className="current-prayer-strip">
+                  <span className="current-prayer-label">CURRENT PRAYER</span>
+                  {currentPrayer
+                    ? <><strong>{currentPrayer.name}</strong><span>Started at {formatClock(currentPrayer.time)}</span></>
+                    : <><strong>Not available</strong><span>Today's current prayer time isn't in your timetable yet.</span></>}
+                </div>
                 {next && remaining ? <>
                   <div className="next-name">{next.name}</div>
                   <div className="arabic">{next.arabic}</div>
