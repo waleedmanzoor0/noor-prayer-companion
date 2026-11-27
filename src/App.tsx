@@ -129,47 +129,58 @@ export default function App() {
   }, [prefs]);
 
   useEffect(() => {
-    if (!supabase) {
+    const client = supabase;
+    if (!client) {
+      setMessage("Noor could not connect to its database. Please refresh the page.");
       setAuthReady(true);
       return;
     }
-    const client = supabase;
+
     let mounted = true;
-    client.auth.getSession().then(async ({ data, error }) => {
-      if (error) throw error;
-      if (data.session) {
-        if (mounted) setSessionEmail(data.session.user.email ?? "Guest");
-      } else {
-        // Create a private Supabase anonymous session so first-time visitors can
-        // use mosque preferences and push notifications without registering.
-        const { data: guestData, error: guestError } = await client.auth.signInAnonymously();
-        if (guestError) throw guestError;
-        if (mounted) setSessionEmail(guestData.user?.email ?? "Guest");
-      }
-      if (mounted) setAuthReady(true);
-    }).catch(error => {
-      if (mounted) {
-        setMessage(error instanceof Error ? error.message : "Could not start a guest session. Please refresh Noor.");
-        setAuthReady(true);
-      }
-    });
+    let guestSignInStarted = false;
+    const startGuestSession = () => {
+      if (guestSignInStarted) return;
+      guestSignInStarted = true;
+      // Start outside the Supabase auth callback to avoid locking auth state
+      // while signInAnonymously emits its SIGNED_IN event.
+      window.setTimeout(() => {
+        void client.auth.signInAnonymously().then(({ data, error }) => {
+          if (!mounted) return;
+          if (error) throw error;
+          if (!data.user) throw new Error("Supabase did not return a guest user.");
+          setSessionEmail(data.user.email ?? "Guest");
+          setAuthReady(true);
+        }).catch(error => {
+          if (!mounted) return;
+          setMessage(error instanceof Error ? error.message : "Could not start a guest session. Please refresh Noor.");
+          setAuthReady(true);
+        });
+      }, 0);
+    };
+
     const { data: listener } = client.auth.onAuthStateChange((event, session) => {
-      // Ignore a null INITIAL_SESSION event: getSession() may already have
-      // created the anonymous guest session while this listener was attaching.
+      if (!mounted) return;
       if (session) {
         setSessionEmail(session.user.email ?? "Guest");
         setOtpSent(false);
         setOtp("");
+        setAuthReady(true);
+      } else if (event === "INITIAL_SESSION") {
+        startGuestSession();
       } else if (event === "SIGNED_OUT") {
         setSessionEmail(null);
         setPrefsLoaded(false);
         setSetupRequired(false);
         setSelectedMosqueId("");
         setMonthRows([]);
+        startGuestSession();
       }
-      setAuthReady(true);
     });
-    return () => { mounted = false; listener.subscription.unsubscribe(); };
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
