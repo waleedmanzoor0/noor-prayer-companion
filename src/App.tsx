@@ -129,156 +129,58 @@ export default function App() {
   }, [prefs]);
 
   useEffect(() => {
-    const client = supabase;
-    let mounted = true;
-    if (!client) {
-      setMessage("Noor could not connect to Supabase. Check the deployment environment settings.");
-      setAuthReady(true);
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      if (mounted) {
-        setMessage("Noor is taking longer than expected to connect. Please check your connection and try again.");
-        setAuthReady(true);
-      }
-    }, 15000);
-
-    // Keep auth callbacks synchronous. Supabase can deadlock if another auth
-    // method is awaited from inside onAuthStateChange.
-    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
-      if (!mounted || !session) return;
-      setSessionEmail(session.user.email ?? "Guest");
-      setOtpSent(false);
-      setOtp("");
-      setAuthReady(true);
-      window.clearTimeout(timeout);
-    });
-
-    const bootstrap = async () => {
+    // Public-first experience: no Supabase Auth session is created or required.
+    let active = true;
+    const loadPublicSetup = async () => {
       try {
-        const { data, error } = await client.auth.getSession();
+        if (!supabase) throw new Error("Noor's database connection is not configured.");
+        const { data, error } = await supabase.from("mosques")
+          .select("id,name,address,city,timetable_source,waqt_slug,waqt_url,masjidi_id,masjidi_supported,masjidi_db_supported,latitude,longitude")
+          .order("name");
         if (error) throw error;
-        if (!mounted) return;
-
-        if (data.session) {
-          setSessionEmail(data.session.user.email ?? "Guest");
-          setAuthReady(true);
-          window.clearTimeout(timeout);
-          return;
+        if (!active) return;
+        const available = (data || []) as Mosque[];
+        setMosques(available);
+        const savedMosqueId = localStorage.getItem("noor-mosque-id") || "";
+        const savedPostcode = localStorage.getItem("noor-postcode") || "";
+        setPostcode(savedPostcode);
+        setSelectedMosqueId(savedMosqueId);
+        setSetupRequired(!savedMosqueId);
+        setPrefsLoaded(true);
+        if (savedMosqueId) {
+          setTab("home");
+          const selected = available.find(item => item.id === savedMosqueId);
+          if (selected?.masjidi_id) {
+            const nowParts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit" }).formatToParts(new Date());
+            const year = Number(nowParts.find(part => part.type === "year")?.value);
+            const month = Number(nowParts.find(part => part.type === "month")?.value);
+            void syncMasjidiMonth(selected.id, selected.masjidi_id, year, month, true);
+          }
         }
-
-        const { data: guestData, error: guestError } = await client.auth.signInAnonymously();
-        if (guestError) throw guestError;
-        if (!mounted) return;
-        if (!guestData.user) throw new Error("Supabase did not return a guest session.");
-        setSessionEmail(guestData.user.email ?? "Guest");
-        setAuthReady(true);
-        window.clearTimeout(timeout);
       } catch (error) {
-        if (!mounted) return;
-        setMessage(error instanceof Error ? error.message : "Could not start Noor. Please try again.");
-        setAuthReady(true);
-        window.clearTimeout(timeout);
+        if (active) {
+          setMessage(error instanceof Error ? error.message : "Could not load Noor.");
+          setPrefsLoaded(true);
+          setSetupRequired(true);
+        }
       }
     };
-
-    void bootstrap();
-    return () => {
-      mounted = false;
-      window.clearTimeout(timeout);
-      listener.subscription.unsubscribe();
-    };
+    void loadPublicSetup();
+    return () => { active = false; };
   }, []);
 
-  useEffect(() => {
-    const client = supabase;
-    if (!client || !sessionEmail) return;
-    let active = true;
-    const loadSetup = async () => {
-      setBusy(true);
-      try {
-        const [{ data: mosqueData, error: mosqueError }, { data: { user }, error: userError }] = await Promise.all([
-          client.from("mosques").select("id,name,address,city,timetable_source,waqt_slug,waqt_url,masjidi_id,masjidi_supported,masjidi_db_supported,latitude,longitude").order("name"),
-          client.auth.getUser(),
-        ]);
-        if (mosqueError) throw mosqueError;
-        if (userError || !user) throw userError || new Error("Please sign in again.");
-        const available = (mosqueData || []) as Mosque[];
-        if (active) setMosques(available);
-
-        const { data, error } = await client.from("user_preferences")
-          .select("preferred_mosque_id,location,timezone,asr_school,madhhab,postcode,notifications_enabled,prayer_notification_preferences")
-          .eq("user_id", user.id).maybeSingle();
-        if (error) throw error;
-
-        if (data) {
-          const stored = (data.prayer_notification_preferences || {}) as Partial<Prefs>;
-          if (active) {
-            setSelectedMosqueId(data.preferred_mosque_id || "");
-            setWaqtSlug(available.find(item => item.id === data.preferred_mosque_id)?.waqt_slug || "");
-            setPostcode(data.postcode || "");
-            const savedMadhhab = ["Hanafi", "Maliki", "Shafi'i", "Hanbali"].includes(String(data.madhhab))
-              ? data.madhhab as Madhhab
-              : "Hanafi";
-            setMadhhab(savedMadhhab);
-            setAsrSchool(savedMadhhab === "Hanafi" ? "Hanafi" : "Standard");
-            setNotificationsEnabled(data.notifications_enabled !== false);
-            setPrefs({
-              Fajr: { ...defaultPrefs.Fajr, ...(stored.Fajr || {}) },
-              Dhuhr: { ...defaultPrefs.Dhuhr, ...(stored.Dhuhr || {}) },
-              Asr: { ...defaultPrefs.Asr, ...(stored.Asr || {}) },
-              Maghrib: { ...defaultPrefs.Maghrib, ...(stored.Maghrib || {}) },
-              Isha: { ...defaultPrefs.Isha, ...(stored.Isha || {}) },
-            });
-            setSetupRequired(!data.preferred_mosque_id);
-          }
-        } else if (active) {
-          setSetupRequired(true);
-          setPostcode("");
-          setSelectedMosqueId("");
-        }
-        if (active) setPrefsLoaded(true);
-      } catch (error) {
-        if (active) setMessage(error instanceof Error ? error.message : "Could not load your Noor settings.");
-      } finally {
-        if (active) setBusy(false);
-      }
-    };
-    void loadSetup();
-    return () => { active = false; };
-  }, [sessionEmail]);
-
   async function loadTimetable() {
-    if (!supabase || !sessionEmail) {
-      setMonthRows([]);
-      return;
-    }
-    setLoadingRows(true);
+    // Timetables are fetched by the public mosque feed and kept on this device.
+    if (!selectedMosqueId) { setMonthRows([]); return; }
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) throw userError || new Error("Please sign in again.");
-      let query = supabase.from("prayer_times").select("*")
-        .eq("user_id", user.id)
-        .order("prayer_date", { ascending: true }).limit(1200);
-      if (selectedMosqueId) query = query.eq("mosque_id", selectedMosqueId);
-      const { data, error } = await query;
-      if (error) throw error;
-      const uniqueDays = new Map<string, PrayerRow>();
-      for (const item of (data || []) as PrayerRow[]) {
-        if (!uniqueDays.has(item.prayer_date)) uniqueDays.set(item.prayer_date, item);
-      }
-      setMonthRows([...uniqueDays.values()]);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not load the mosque timetable.");
-    } finally {
-      setLoadingRows(false);
-    }
+      const cached = localStorage.getItem("noor-prayer-rows:" + selectedMosqueId);
+      setMonthRows(cached ? JSON.parse(cached) as PrayerRow[] : []);
+    } catch { setMonthRows([]); }
   }
 
   useEffect(() => {
-    if (sessionEmail && prefsLoaded) void loadTimetable();
-  }, [sessionEmail, selectedMosqueId, prefsLoaded]);
+    if (prefsLoaded && selectedMosqueId) void loadTimetable();
+  }, [selectedMosqueId, prefsLoaded]);
 
   useEffect(() => {
     const client = supabase;
@@ -527,10 +429,7 @@ export default function App() {
   async function connectWaqtMosque(rawSlug = waqtSlug, silent = false) {
     const client = supabase;
     const supplied = rawSlug.trim();
-    if (!client || !sessionEmail) {
-      setMessage("Sign in to Noor before connecting a Waqt mosque.");
-      return;
-    }
+    if (!client) { setMessage("Noor is not connected to its timetable service."); return; }
     if (!supplied) {
       setMessage("Enter a Waqt mosque page address or slug first.");
       return;
@@ -632,11 +531,6 @@ export default function App() {
     }
   }
 
-  async function discoverNearbyMosques() {
-    if (!supabase || !sessionEmail) {
-      setMessage("Sign in to Noor before searching for nearby mosques.");
-      return;
-    }
     const value = postcode.trim().toUpperCase();
     if (!value) {
       setMessage("Enter your UK postcode to find nearby mosques.");
@@ -680,9 +574,6 @@ export default function App() {
     month: number,
     silent = false,
   ) {
-    if (!supabase || !sessionEmail) throw new Error("Sign in to Noor before syncing mosque prayer times.");
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) throw userError || new Error("Please sign in again.");
 
     if (!silent) setMasjidiSyncing(true);
     try {
@@ -699,21 +590,14 @@ export default function App() {
       if (data?.error) throw new Error(String(data.error));
       if (!data?.daysImported) throw new Error("Masjidi has not published a complete timetable for this month.");
 
-      const firstDay = year + "-" + String(month).padStart(2, "0") + "-01";
-      const lastDay = year + "-" + String(month).padStart(2, "0") + "-" + String(new Date(year, month, 0).getDate()).padStart(2, "0");
-      const { data: rows, error: rowsError } = await supabase.from("prayer_times")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("mosque_id", mosqueId)
-        .gte("prayer_date", firstDay)
-        .lte("prayer_date", lastDay)
-        .order("prayer_date");
-      if (rowsError) throw rowsError;
-      if (rows?.length) {
+      const rows = (data.rows || []) as PrayerRow[];
+      if (rows.length) {
         setMonthRows(previous => {
           const byDate = new Map(previous.map(item => [item.prayer_date, item]));
-          (rows as PrayerRow[]).forEach(row => byDate.set(row.prayer_date, row));
-          return [...byDate.values()].sort((a, b) => a.prayer_date.localeCompare(b.prayer_date));
+          rows.forEach(row => byDate.set(row.prayer_date, row));
+          const merged = [...byDate.values()].sort((a, b) => a.prayer_date.localeCompare(b.prayer_date));
+          localStorage.setItem("noor-prayer-rows:" + mosqueId, JSON.stringify(merged));
+          return merged;
         });
       }
       if (!silent) {
@@ -744,21 +628,8 @@ export default function App() {
       await syncMasjidiMonth(item.mosqueId, item.masjidiId, year, month, false);
       autoMasjidiRefreshAttempt.current = item.mosqueId + ":" + year + "-" + String(month);
       if (persistSelection) {
-        const { data: { user }, error: userError } = await supabase!.auth.getUser();
-        if (userError || !user) throw userError || new Error("Please sign in again.");
-        const { error } = await supabase!.from("user_preferences").upsert({
-          user_id: user.id,
-          preferred_mosque_id: item.mosqueId,
-          postcode: postcode.trim().toUpperCase() || null,
-          location: postcode.trim().toUpperCase() || "United Kingdom",
-          timezone: "Europe/London",
-          madhhab,
-          asr_school: madhhab === "Hanafi" ? "Hanafi" : "Standard",
-          notifications_enabled: notificationsEnabled,
-          prayer_notification_preferences: prefs,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "user_id" });
-        if (error) throw error;
+        localStorage.setItem("noor-mosque-id", item.mosqueId);
+        localStorage.setItem("noor-postcode", postcode.trim().toUpperCase());
       }
 
       setSelectedMosqueId(item.mosqueId);
